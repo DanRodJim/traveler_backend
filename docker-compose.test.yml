@@ -1,0 +1,27 @@
+services:
+  test-db:
+    image: postgres:18-alpine
+    container_name: travel_planner_test_db
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: test_travel_planner
+    ports:
+      - "5433:5432"
+    volumes:
+      - test_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_travel_planner"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test_network
+
+volumes:
+  test_db_data:
+    driver: local
+
+networks:
+  test_network:
+    driver: bridge
