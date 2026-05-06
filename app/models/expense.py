@@ -39,8 +39,11 @@ class Expense(Base):
     currency: Mapped[str] = mapped_column(String(3), default="USD")
 
     category: Mapped[ExpenseCategory] = mapped_column(
-        SQLEnum(ExpenseCategory, name="expense_category"),
-        default=ExpenseCategory.other
+        SQLEnum(
+            *[cat.value for cat in ExpenseCategory],
+            name='expense_category'
+        ),
+        nullable=False
     )
 
     expense_date: Mapped[date] = mapped_column(Date, nullable=False)

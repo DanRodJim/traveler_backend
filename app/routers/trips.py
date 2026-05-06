@@ -1,17 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
 
 from app.database.db import get_db
+from app.models.trip_member import TripMember
 from app.schemas.trip import (
-    TripCreate, TripUpdate, TripResponse,
-    TripMemberCreate, TripMemberUpdate, TripMemberResponse
+    TripCreate, TripUpdate, TripResponse
 )
+from app.schemas.trip_member import TripMemberCreate, TripMemberResponse, TripMemberUpdate
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
-from app.models.user import User
-from app.models.trip import Trip, TripMember
+from app.models import Trip, User
 from app.core.exceptions import (
     TripNotFoundError,
     UnauthorizedError

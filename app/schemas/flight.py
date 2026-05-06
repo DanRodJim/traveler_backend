@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import date, time, datetime
 from typing import Optional
 from decimal import Decimal
@@ -15,7 +15,10 @@ class FlightBase(BaseModel):
     arrival_time: Optional[time] = None
     booking_reference: Optional[str] = Field(None, max_length=50)
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
+    currency: Optional[str] = Field(default="USD", pattern=r'^[A-Z]{3}$')
     notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class FlightCreate(FlightBase):
     trip_id: uuid.UUID
@@ -31,7 +34,10 @@ class FlightUpdate(BaseModel):
     arrival_time: Optional[time] = None
     booking_reference: Optional[str] = Field(None, max_length=50)
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
+    currency: Optional[str] = Field(None, pattern=r'^[A-Z]{3}$')
     notes: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class FlightResponse(FlightBase):
     id: uuid.UUID
@@ -39,6 +45,3 @@ class FlightResponse(FlightBase):
     created_by: uuid.UUID
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
-    class Config:
-        from_attributes = True

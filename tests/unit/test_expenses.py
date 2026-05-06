@@ -147,7 +147,7 @@ class TestExpenses:
             title="Private expense",
             amount=100.00,
             currency="USD",
-            category=ExpenseCategory.other,
+            category=ExpenseCategory.OTHER,
             expense_date=date.today(),
             paid_by=test_user2.id,
             split_between=[str(test_user2.id)]
@@ -189,7 +189,7 @@ class TestExpenses:
             title="Private expense",
             amount=100.00,
             currency="USD",
-            category=ExpenseCategory.other,
+            category=ExpenseCategory.OTHER,
             expense_date=date.today(),
             paid_by=test_user2.id,
             split_between=[str(test_user2.id)]
@@ -232,7 +232,7 @@ class TestExpenses:
             title="Private expense",
             amount=100.00,
             currency="USD",
-            category=ExpenseCategory.other,
+            category=ExpenseCategory.OTHER,
             expense_date=date.today(),
             paid_by=test_user2.id,
             split_between=[str(test_user2.id)]

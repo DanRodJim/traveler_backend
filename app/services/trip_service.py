@@ -1,13 +1,20 @@
-from sqlalchemy.orm import Session
-from app.models.trip import Trip, TripMember, MemberRole
-from app.schemas.trip import TripCreate, TripUpdate, TripMemberCreate
+from datetime import UTC, datetime
+
+from sqlalchemy.orm import Session, joinedload
+from app.common.types import MemberRole
+from app.models import MemberRole, Trip, TripMember
+from app.schemas.trip import TripCreate, TripUpdate
 from typing import List, Optional
 import uuid
 from app.core.exceptions import (
+    InvalidDateRangeError,
     NotTripOwnerError,
     DuplicateResourceError,
-    ResourceNotFoundError
+    ResourceNotFoundError,
+    UserNotFoundError
 )
+from app.schemas.trip_member import TripMemberCreate
+from app.services.user_service import UserService
 
 class TripService:
     def __init__(self, db: Session):
@@ -34,8 +41,20 @@ class TripService:
         )
         
         self.db.add(trip)
+        self.db.flush()
+        
+        trip_member = TripMember(
+            id=uuid.uuid4(),
+            trip_id=trip.id,
+            user_id=owner_id,
+            role=MemberRole.OWNER,
+            joined_at=datetime.now(UTC)
+        )
+        
+        self.db.add(trip_member)
         self.db.commit()
         self.db.refresh(trip)
+        
         return trip
     
     # Only owner or editor
@@ -48,6 +67,13 @@ class TripService:
             return None
         
         update_data = trip_data.model_dump(exclude_unset=True)
+
+        new_start = update_data.get("start_date", trip.start_date)
+        new_end = update_data.get("end_date", trip.end_date)
+        
+        if new_start and new_end and new_end <= new_start:
+            raise InvalidDateRangeError("dates")
+
         for field, value in update_data.items():
             setattr(trip, field, value)
         
@@ -73,14 +99,20 @@ class TripService:
 
     # Only owner
     def add_member(self, trip_id: uuid.UUID, member_data: TripMemberCreate, owner_id: uuid.UUID) -> TripMember:
+        user_service = UserService(self.db)
         trip = self.get_by_id(trip_id)
         
         if not trip or trip.owner_id != owner_id:
             raise NotTripOwnerError()
         
+        user = user_service.get_by_email(member_data.user_email)
+
+        if not user:
+            raise UserNotFoundError()
+        
         existing = self.db.query(TripMember).filter(
             TripMember.trip_id == trip_id,
-            TripMember.user_id == member_data.user_id
+            TripMember.user_id == user.id
         ).first()
         
         if existing:
@@ -89,7 +121,8 @@ class TripService:
         member = TripMember(
             id=uuid.uuid4(),
             trip_id=trip_id,
-            **member_data.model_dump()
+            user_id=user.id,
+            role=member_data.role
         )
         
         self.db.add(member)
@@ -145,7 +178,7 @@ class TripService:
         return True
     
     def get_members(self, trip_id: uuid.UUID) -> List[TripMember]:
-        return self.db.query(TripMember).filter(TripMember.trip_id == trip_id).all()
+        return self.db.query(TripMember).filter(TripMember.trip_id == trip_id).options(joinedload(TripMember.user)).all()
     
 
     # Permissions
@@ -166,7 +199,7 @@ class TripService:
         if member is None:
             return False
         
-        return member.role == MemberRole.editor
+        return member.role == MemberRole.EDITOR
     
     def has_view_permission(self, trip_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         trip = self.get_by_id(trip_id)

@@ -8,8 +8,7 @@ from app.schemas.flight import FlightCreate, FlightUpdate, FlightResponse
 from app.services.flight_service import FlightService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
-from app.models.user import User
-from app.models.flight import Flight
+from app.models import Flight, User
 from app.core.exceptions import (
     FlightNotFoundError,
     UnauthorizedError,

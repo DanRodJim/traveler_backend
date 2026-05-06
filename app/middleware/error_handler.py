@@ -52,6 +52,9 @@ async def integrity_error_handler(request: Request, exc: Exception) -> JSONRespo
     elif "check_accommodation_dates" in error_message:
         message = "Check-out date must be after check-in date"
         error_type = "InvalidDateRangeError"
+    elif "check_activity_times" in error_message:
+        message = "End time must be after start time"
+        error_type = "InvalidDateRangeError"
     elif "unique" in error_message or "duplicate" in error_message:
         if "email" in error_message:
             message = "Email already registered"

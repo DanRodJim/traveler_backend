@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import String, Date, Time, Numeric, DateTime, ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy import CheckConstraint, String, Date, Time, Numeric, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -18,6 +18,10 @@ if TYPE_CHECKING:
 
 class Activity(Base):
     __tablename__ = "activities"
+
+    __table_args__ = (
+        CheckConstraint("end_time >= start_time", name="check_activity_times"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -44,11 +48,15 @@ class Activity(Base):
     address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     category: Mapped[ActivityCategory] = mapped_column(
-        SQLEnum(ActivityCategory, name="activity_category"),
-        default=ActivityCategory.other
+        SQLEnum(
+            *[cat.value for cat in ActivityCategory],
+            name='activity_category'
+        ),
+        nullable=False
     )
 
     cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True, default="USD")
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

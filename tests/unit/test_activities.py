@@ -117,7 +117,7 @@ class TestActivities:
             trip_id=test_trip2.id,
             title="Unauthorized Activity",
             activity_date=date.today(),
-            category=ActivityCategory.other,
+            category=ActivityCategory.OTHER,
             created_by=test_trip2.owner_id
         )
         db.add(activity)
@@ -156,7 +156,7 @@ class TestActivities:
             trip_id=test_trip2.id,
             title="Some Activity",
             activity_date=date.today(),
-            category=ActivityCategory.other,
+            category=ActivityCategory.OTHER,
             created_by=test_trip2.owner_id
         )
         db.add(activity)
@@ -196,7 +196,7 @@ class TestActivities:
             trip_id=test_trip2.id,
             title="Some Activity",
             activity_date=date.today(),
-            category=ActivityCategory.other,
+            category=ActivityCategory.OTHER,
             created_by=test_trip2.owner_id
         )
         db.add(activity)

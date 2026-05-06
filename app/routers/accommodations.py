@@ -8,8 +8,7 @@ from app.schemas.accommodation import AccommodationCreate, AccommodationUpdate, 
 from app.services.accommodation_service import AccommodationService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
-from app.models.user import User
-from app.models.accommodation import Accommodation
+from app.models import Accommodation, User
 from app.core.exceptions import (
     AccommodationNotFoundError,
     UnauthorizedError,

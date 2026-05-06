@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.core.exceptions import InvalidTimeRangeError
 from app.models.activity import Activity
 from app.schemas.activity import ActivityCreate, ActivityUpdate
 from typing import List, Optional
@@ -44,6 +45,13 @@ class ActivityService:
             return None
         
         update_data = activity_data.model_dump(exclude_unset=True)
+
+        new_start = update_data.get("start_time", activity.start_time)
+        new_end = update_data.get("end_time", activity.end_time)
+        
+        if new_start and new_end and new_end <= new_start:
+            raise InvalidTimeRangeError("times")
+        
         for field, value in update_data.items():
             setattr(activity, field, value)
         

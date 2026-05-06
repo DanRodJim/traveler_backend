@@ -39,8 +39,11 @@ class Accommodation(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
 
     type: Mapped[AccommodationType] = mapped_column(
-        SQLEnum(AccommodationType, name="accommodation_type"),
-        default=AccommodationType.hotel
+        SQLEnum(
+            *[t.value for t in AccommodationType],
+            name='accommodation_type'
+        ),
+        nullable=False
     )
 
     address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -57,6 +60,7 @@ class Accommodation(Base):
         Numeric(12, 2),
         nullable=True
     )
+    currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True, default="USD")
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

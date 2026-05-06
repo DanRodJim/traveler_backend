@@ -189,7 +189,7 @@ def test_trip(db, test_user) -> Trip:
         end_date=date.today() + timedelta(days=45),
         budget=3000.00,
         currency="USD",
-        status=TripStatus.planning,
+        status=TripStatus.PLANNING,
         owner_id=test_user.id
     )
     db.add(trip)
@@ -210,7 +210,7 @@ def test_trip2(db, test_user2) -> Trip:
         end_date=date.today() + timedelta(days=75),
         budget=2500.00,
         currency="EUR",
-        status=TripStatus.planning,
+        status=TripStatus.PLANNING,
         owner_id=test_user2.id
     )
     db.add(trip)
@@ -249,7 +249,7 @@ def test_activity(db, test_trip, test_user) -> Activity:
         start_time=time(10, 0),
         end_time=time(12, 0),
         location="Tokyo Tower",
-        category=ActivityCategory.sightseeing,
+        category=ActivityCategory.SIGHTSEEING,
         cost=25.00,
         created_by=test_user.id
     )
@@ -294,7 +294,7 @@ def test_accommodation(db, test_trip, test_user) -> Accommodation:
         id=uuid.uuid4(),
         trip_id=test_trip.id,
         name="Tokyo Hilton Hotel",
-        type=AccommodationType.hotel,
+        type=AccommodationType.HOTEL,
         address="1-2-3 Shinjuku, Tokyo",
         check_in_date=date.today() + timedelta(days=31),
         check_out_date=date.today() + timedelta(days=45),
@@ -319,7 +319,7 @@ def test_expense(db, test_trip, test_user) -> Expense:
         title="Dinner at restaurant",
         amount=85.50,
         currency="USD",
-        category=ExpenseCategory.food,
+        category=ExpenseCategory.FOOD,
         expense_date=date.today() + timedelta(days=35),
         paid_by=test_user.id,
         split_between=[str(test_user.id)]

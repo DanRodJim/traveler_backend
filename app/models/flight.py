@@ -45,6 +45,7 @@ class Flight(Base):
 
     booking_reference: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     cost: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True, default="USD")
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

@@ -9,8 +9,7 @@ from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse
 from app.services.expense_service import ExpenseService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
-from app.models.user import User
-from app.models.expense import Expense
+from app.models import Expense, User
 from app.core.exceptions import (
     ExpenseNotFoundError,
     UnauthorizedError,

@@ -17,6 +17,11 @@ class InvalidDateRangeError(DatabaseConstraintError):
         super().__init__(f"Invalid {field}: end date must be after start date")
 
 
+class InvalidTimeRangeError(DatabaseConstraintError):
+    def __init__(self, field: str = "time range"):
+        super().__init__(f"Invalid {field}: end time must be after start time")
+
+
 class DuplicateResourceError(DatabaseConstraintError):
     def __init__(self, resource: str = "Resource", field: str = ""):
         field_msg = f" ({field})" if field else ""

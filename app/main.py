@@ -5,7 +5,7 @@ from pydantic import ValidationError as PydanticValidationError
 import logging
 from contextlib import asynccontextmanager
 
-from app.routers import auth, users, trips, activities, flights, accommodations, expenses
+from app.routers import auth, dashboard, users, trips, activities, flights, accommodations, expenses
 from app.database.db import engine, Base
 from app.core.config import settings
 from app.core.exceptions import AppException
@@ -82,6 +82,7 @@ app.include_router(activities.router)
 app.include_router(flights.router)
 app.include_router(accommodations.router)
 app.include_router(expenses.router)
+app.include_router(dashboard.router)
 
 logger.info("Routers registered")
 

@@ -8,8 +8,7 @@ from app.schemas.activity import ActivityCreate, ActivityUpdate, ActivityRespons
 from app.services.activity_service import ActivityService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
-from app.models.user import User
-from app.models.activity import Activity
+from app.models import Activity, User
 from app.core.exceptions import (
     ActivityNotFoundError,
     UnauthorizedError,

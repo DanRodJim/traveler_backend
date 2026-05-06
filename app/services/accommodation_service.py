@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from app.core.exceptions import InvalidDateRangeError
 from app.models.accommodation import Accommodation
 from app.schemas.accommodation import AccommodationCreate, AccommodationUpdate
 from typing import List, Optional
@@ -34,6 +35,13 @@ class AccommodationService:
             return None
         
         update_data = accommodation_data.model_dump(exclude_unset=True)
+
+        new_start = update_data.get("check_in_date", accommodation.check_in_date)
+        new_end = update_data.get("check_out_date", accommodation.check_out_date)
+        
+        if new_start and new_end and new_end <= new_start:
+            raise InvalidDateRangeError("dates")
+        
         for field, value in update_data.items():
             setattr(accommodation, field, value)
         

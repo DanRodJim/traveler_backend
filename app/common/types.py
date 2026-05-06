@@ -1,37 +1,37 @@
 from enum import Enum
 
 class AccommodationType(str, Enum):
-    hotel = "hotel"
-    airbnb = "airbnb"
-    hostel = "hostel"
-    resort = "resort"
-    apartment = "apartment"
-    other = "other"
+    HOTEL = "hotel"
+    AIRBNB = "airbnb"
+    HOSTEL = "hostel"
+    RESORT = "resort"
+    APARTMENT = "apartment"
+    OTHER = "other"
 
 class ActivityCategory(str, Enum):
-    sightseeing = "sightseeing"
-    restaurant = "restaurant"
-    transport = "transport"
-    entertainment = "entertainment"
-    shopping = "shopping"
-    other = "other"
+    SIGHTSEEING = "sightseeing"
+    RESTAURANT = "restaurant"
+    TRANSPORT = "transport"
+    ENTERTAINMENT = "entertainment"
+    SHOPPING = "shopping"
+    OTHER = "other"
 
 class ExpenseCategory(str, Enum):
-    food = "food"
-    transport = "transport"
-    activity = "activity"
-    accommodation = "accommodation"
-    shopping = "shopping"
-    other = "other"
+    FOOD = "food"
+    TRANSPORT = "transport"
+    ACTIVITY = "activity"
+    ACCOMMODATION = "accommodation"
+    SHOPPING = "shopping"
+    OTHER = "other"
 
 class TripStatus(str, Enum):
-    planning = "planning"
-    confirmed = "confirmed"
-    in_progress = "in_progress"
-    completed = "completed"
-    cancelled = "cancelled"
+    PLANNING = "planning"
+    CONFIRMED = "confirmed"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
 
 class MemberRole(str, Enum):
-    owner = "owner"
-    editor = "editor"
-    viewer = "viewer"
+    OWNER = "owner"
+    EDITOR = "editor"
+    VIEWER = "viewer"

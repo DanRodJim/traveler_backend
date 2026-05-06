@@ -131,7 +131,7 @@ class TestAccommodations:
             id=uuid.uuid4(),
             trip_id=test_trip2.id,
             name="Private Hotel",
-            type=AccommodationType.hotel,
+            type=AccommodationType.HOTEL,
             check_in_date=date.today(),
             check_out_date=date.today() + timedelta(days=1),
             created_by=test_trip2.owner_id
@@ -171,7 +171,7 @@ class TestAccommodations:
             id=uuid.uuid4(),
             trip_id=test_trip2.id,
             name="Private Hotel",
-            type=AccommodationType.hotel,
+            type=AccommodationType.HOTEL,
             check_in_date=date.today(),
             check_out_date=date.today() + timedelta(days=1),
             created_by=test_trip2.owner_id
@@ -212,7 +212,7 @@ class TestAccommodations:
             id=uuid.uuid4(),
             trip_id=test_trip2.id,
             name="Private Hotel",
-            type=AccommodationType.hotel,
+            type=AccommodationType.HOTEL,
             check_in_date=date.today(),
             check_out_date=date.today() + timedelta(days=1),
             created_by=test_trip2.owner_id
