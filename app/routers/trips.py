@@ -8,14 +8,16 @@ from app.models.trip_member import TripMember
 from app.schemas.trip import (
     TripCreate, TripUpdate, TripResponse
 )
-from app.schemas.trip_member import TripMemberCreate, TripMemberResponse, TripMemberUpdate
+from app.schemas.trip_member import TripMemberCreate, TripMemberResponse, TripMemberUpdate,TripMemberBudgetUpdate
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
 from app.models import Trip, User
 from app.core.exceptions import (
+    InsufficientPermissionsError,
     TripNotFoundError,
     UnauthorizedError
 )
+from app.common.trip_utils import verify_trip_membership
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
 
@@ -66,8 +68,11 @@ async def update_trip(
     db: Session = Depends(get_db)
 ) -> TripResponse:
     service = TripService(db)
+
+    if not service.has_edit_permission(trip_id, current_user.id):
+        raise InsufficientPermissionsError("editor")
     
-    trip: Trip | None = service.update(trip_id, trip_data, current_user.id)
+    trip: Trip | None = service.update(trip_id, trip_data)
     if not trip:
         raise TripNotFoundError()
     
@@ -81,6 +86,9 @@ async def delete_trip(
     db: Session = Depends(get_db)
 ) -> None:
     service = TripService(db)
+
+    if not service.has_edit_permission(trip_id, current_user.id):
+            raise InsufficientPermissionsError("editor")
     
     if not service.delete(trip_id, current_user.id):
         raise TripNotFoundError()
@@ -137,7 +145,7 @@ async def update_trip_member_role(
 
 
 @router.delete("/{trip_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_trip_member(
+async def remove_or_leave_trip_member(
     trip_id: uuid.UUID,
     user_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -145,3 +153,26 @@ async def remove_trip_member(
 ) -> None:
     service = TripService(db)
     service.remove_member(trip_id, user_id, current_user.id)
+
+
+@router.put("/{trip_id}/members/me/budget", response_model=TripMemberResponse)
+async def update_my_personal_budget(
+    trip_id: uuid.UUID,
+    budget_data: TripMemberBudgetUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> TripMemberResponse:
+    verify_trip_membership(db, trip_id, current_user.id)
+
+    member = db.query(TripMember).filter(
+        TripMember.trip_id == trip_id,
+        TripMember.user_id == current_user.id
+    ).first()
+
+    if member is not None:
+        member.personal_budget = budget_data.personal_budget
+        
+    db.commit()
+    db.refresh(member)
+
+    return TripMemberResponse.model_validate(member)

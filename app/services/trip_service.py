@@ -11,6 +11,8 @@ from app.core.exceptions import (
     NotTripOwnerError,
     DuplicateResourceError,
     ResourceNotFoundError,
+    TripNotFoundError,
+    UnauthorizedError,
     UserNotFoundError
 )
 from app.schemas.trip_member import TripMemberCreate
@@ -58,12 +60,9 @@ class TripService:
         return trip
     
     # Only owner or editor
-    def update(self, trip_id: uuid.UUID, trip_data: TripUpdate, user_id: uuid.UUID) -> Optional[Trip]:
+    def update(self, trip_id: uuid.UUID, trip_data: TripUpdate) -> Optional[Trip]:
         trip = self.get_by_id(trip_id)
         if not trip:
-            return None
-        
-        if not self.has_edit_permission(trip_id, user_id):
             return None
         
         update_data = trip_data.model_dump(exclude_unset=True)
@@ -105,7 +104,7 @@ class TripService:
         if not trip or trip.owner_id != owner_id:
             raise NotTripOwnerError()
         
-        user = user_service.get_by_email(member_data.user_email)
+        user = user_service.get_by_email(member_data.email)
 
         if not user:
             raise UserNotFoundError()
@@ -159,23 +158,32 @@ class TripService:
         self.db.refresh(member)
         return member
 
-    def remove_member(self, trip_id: uuid.UUID, user_id: uuid.UUID, owner_id: uuid.UUID) -> bool:
+    def remove_member(
+        self,
+        trip_id: uuid.UUID,
+        user_id: uuid.UUID,
+        current_user_id: uuid.UUID
+    ) -> None:
         trip = self.get_by_id(trip_id)
-        
-        if not trip or trip.owner_id != owner_id:
-            raise NotTripOwnerError()
-        
+        if not trip:
+            raise TripNotFoundError()
+
+        if trip.owner_id == user_id and user_id == current_user_id:
+            raise UnauthorizedError("Owner cannot leave the trip. Delete the trip instead.")
+
+        if user_id != current_user_id and trip.owner_id != current_user_id:
+            raise UnauthorizedError("Only the owner can remove other members")
+
         member = self.db.query(TripMember).filter(
             TripMember.trip_id == trip_id,
             TripMember.user_id == user_id
         ).first()
-        
+
         if not member:
-            raise ResourceNotFoundError("Member")
-        
+            raise TripNotFoundError()
+
         self.db.delete(member)
         self.db.commit()
-        return True
     
     def get_members(self, trip_id: uuid.UUID) -> List[TripMember]:
         return self.db.query(TripMember).filter(TripMember.trip_id == trip_id).options(joinedload(TripMember.user)).all()

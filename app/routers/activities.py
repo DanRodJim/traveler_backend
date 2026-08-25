@@ -4,7 +4,9 @@ from typing import List, Optional
 import uuid
 
 from app.database.db import get_db
-from app.schemas.activity import ActivityCreate, ActivityUpdate, ActivityResponse
+from app.schemas.activity import (
+    ActivityCreate, ActivityUpdate, ActivityResponse, ActivitySplitResponse
+)
 from app.services.activity_service import ActivityService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
@@ -28,14 +30,14 @@ async def get_activities(
     trip_service = TripService(db)
     if not trip_service.has_view_permission(trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this trip")
-    
+
     service = ActivityService(db)
-    
+
     if date:
         activities: List[Activity] = service.get_by_date(trip_id, date)
     else:
         activities: List[Activity] = service.get_all_by_trip(trip_id)
-    
+
     return [ActivityResponse.model_validate(activity) for activity in activities]
 
 
@@ -47,14 +49,14 @@ async def get_activity(
 ) -> ActivityResponse:
     service = ActivityService(db)
     activity: Activity | None = service.get_by_id(activity_id)
-    
+
     if not activity:
         raise ActivityNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_view_permission(activity.trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this activity")
-    
+
     return ActivityResponse.model_validate(activity)
 
 
@@ -67,10 +69,10 @@ async def create_activity(
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(activity_data.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
+
     service = ActivityService(db)
     activity: Activity = service.create(activity_data, current_user.id)
-    
+
     return ActivityResponse.model_validate(activity)
 
 
@@ -83,18 +85,18 @@ async def update_activity(
 ) -> ActivityResponse:
     service = ActivityService(db)
     activity: Activity | None = service.get_by_id(activity_id)
-    
+
     if not activity:
         raise ActivityNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(activity.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
-    updated: Activity | None = service.update(activity_id, activity_data)
+
+    updated: Activity | None = service.update_with_splits(activity_id, activity_data)
     if not updated:
         raise ActivityNotFoundError()
-    
+
     return ActivityResponse.model_validate(updated)
 
 
@@ -106,12 +108,36 @@ async def delete_activity(
 ) -> None:
     service = ActivityService(db)
     activity: Activity | None = service.get_by_id(activity_id)
-    
+
     if not activity:
         raise ActivityNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(activity.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
+
     service.delete(activity_id)
+
+
+@router.patch("/{activity_id}/splits/{split_id}/pay", response_model=ActivitySplitResponse)
+async def mark_activity_split_paid(
+    activity_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> ActivitySplitResponse:
+    service = ActivityService(db)
+    split = service.mark_split_as_paid(activity_id, split_id, current_user.id)
+    return ActivitySplitResponse.model_validate(split)
+
+
+@router.patch("/{activity_id}/splits/{split_id}/unpay", response_model=ActivitySplitResponse)
+async def unmark_activity_split_paid(
+    activity_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> ActivitySplitResponse:
+    service = ActivityService(db)
+    split = service.unmark_split_as_paid(activity_id, split_id, current_user.id)
+    return ActivitySplitResponse.model_validate(split)

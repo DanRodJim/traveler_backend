@@ -6,6 +6,7 @@ import uuid
 
 from app.database.db import get_db
 from app.schemas.expense import ExpenseCreate, ExpenseUpdate, ExpenseResponse
+from app.schemas.expense_split import ExpenseSplitResponse
 from app.services.expense_service import ExpenseService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
@@ -30,7 +31,7 @@ async def get_expenses(
         raise UnauthorizedError("Not authorized to view this trip")
     
     service = ExpenseService(db)
-    expenses: List[Expense] = service.get_all_by_trip(trip_id)
+    expenses: List[Expense] = service.get_all_by_trip(trip_id, current_user.id)
     
     return [ExpenseResponse.model_validate(expense) for expense in expenses]
 
@@ -103,7 +104,7 @@ async def update_expense(
     if not trip_service.has_edit_permission(expense.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
     
-    updated: Expense | None = service.update(expense_id, expense_data)
+    updated: Expense | None = service.update_with_splits(expense_id, expense_data)
     if not updated:
         raise ExpenseNotFoundError()
     
@@ -127,3 +128,32 @@ async def delete_expense(
         raise InsufficientPermissionsError("editor")
     
     service.delete(expense_id)
+
+@router.patch(
+    "/{expense_id}/splits/{split_id}/pay",
+    response_model=ExpenseSplitResponse
+)
+async def mark_split_paid(
+    expense_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> ExpenseSplitResponse:
+    service = ExpenseService(db)
+    split = service.mark_split_as_paid(expense_id, split_id, current_user.id)
+    return ExpenseSplitResponse.model_validate(split)
+
+
+@router.patch(
+    "/{expense_id}/splits/{split_id}/unpay",
+    response_model=ExpenseSplitResponse
+)
+async def unmark_split_paid(
+    expense_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> ExpenseSplitResponse:
+    service = ExpenseService(db)
+    split = service.unmark_split_as_paid(expense_id, split_id, current_user.id)
+    return ExpenseSplitResponse.model_validate(split)

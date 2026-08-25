@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, String, Date, Time, Numeric, DateTime, ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy import Boolean, CheckConstraint, String, Date, Time, Numeric, DateTime, ForeignKey, Text, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database.db import Base
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, date, time
 from decimal import Decimal
 from app.common.types import ActivityCategory
@@ -14,6 +14,7 @@ import uuid
 
 if TYPE_CHECKING:
     from app.models.trip import Trip
+    from app.models.user import User
 
 
 class Activity(Base):
@@ -60,6 +61,13 @@ class Activity(Base):
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    paid_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True
+    )
+    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id"),
@@ -82,3 +90,42 @@ class Activity(Base):
         "Trip",
         back_populates="activities"
     )
+
+    payer: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[paid_by]
+    )
+
+    splits: Mapped[List["ActivitySplit"]] = relationship(
+        "ActivitySplit",
+        back_populates="activity",
+        cascade="all, delete-orphan"
+    )
+
+
+# ── ActivitySplit ─────────────────────────────────────────────────────────────
+
+class ActivitySplit(Base):
+    __tablename__ = "activity_splits"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    activity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("activities.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+
+    activity: Mapped[Activity] = relationship("Activity", back_populates="splits")
+    user: Mapped["User"] = relationship("User")

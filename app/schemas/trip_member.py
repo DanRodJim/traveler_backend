@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Optional
 from pydantic import BaseModel, EmailStr, ConfigDict
 from datetime import datetime
@@ -13,16 +14,20 @@ class TripMemberBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class TripMemberCreate(BaseModel):
-    user_email: EmailStr
+    email: EmailStr
     role: MemberRole = MemberRole.VIEWER
 
 class TripMemberUpdate(BaseModel):
     role: MemberRole
 
+class TripMemberBudgetUpdate(BaseModel):
+    personal_budget: Optional[Decimal] = None
+
 class TripMemberResponse(TripMemberBase):
     id: uuid.UUID
     trip_id: uuid.UUID
     joined_at: datetime
+    personal_budget: Optional[Decimal] = None
     user: Optional[UserBase] = None
     
     model_config = ConfigDict(from_attributes=True)

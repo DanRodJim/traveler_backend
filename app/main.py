@@ -5,7 +5,7 @@ from pydantic import ValidationError as PydanticValidationError
 import logging
 from contextlib import asynccontextmanager
 
-from app.routers import auth, dashboard, users, trips, activities, flights, accommodations, expenses
+from app.routers import auth, calendar, dashboard, pdf, users, trips, activities, flights, accommodations, expenses, balances, budget, ai_estimator, checklists
 from app.database.db import engine, Base
 from app.core.config import settings
 from app.core.exceptions import AppException
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # Startup
-    logger.info(f"🚀 {settings.PROJECT_NAME} v{settings.VERSION} starting...")
+    logger.info(f"Tabibito: {settings.PROJECT_NAME} v{settings.VERSION} starting...")
     
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified")
@@ -83,6 +83,12 @@ app.include_router(flights.router)
 app.include_router(accommodations.router)
 app.include_router(expenses.router)
 app.include_router(dashboard.router)
+app.include_router(balances.router)
+app.include_router(budget.router)
+app.include_router(ai_estimator.router)
+app.include_router(checklists.router)
+app.include_router(calendar.router)
+app.include_router(pdf.router)
 
 logger.info("Routers registered")
 

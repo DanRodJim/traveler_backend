@@ -55,14 +55,29 @@ class ActivityNotFoundError(ResourceNotFoundError):
         super().__init__("Activity")
 
 
+class ActivitySplitNotFoundError(ResourceNotFoundError):
+    def __init__(self):
+        super().__init__("Activity split")
+
+
 class FlightNotFoundError(ResourceNotFoundError):
     def __init__(self):
         super().__init__("Flight")
 
 
+class FlightSplitNotFoundError(ResourceNotFoundError):
+    def __init__(self):
+        super().__init__("Flight split")
+
+
 class AccommodationNotFoundError(ResourceNotFoundError):
     def __init__(self):
         super().__init__("Accommodation")
+
+
+class AccommodationSplitNotFoundError(ResourceNotFoundError):
+    def __init__(self):
+        super().__init__("Accommodation split")
 
 
 class ExpenseNotFoundError(ResourceNotFoundError):
@@ -74,6 +89,10 @@ class UserNotFoundError(ResourceNotFoundError):
     def __init__(self):
         super().__init__("User")
 
+
+class ChecklistNotFoundError(ResourceNotFoundError):
+    def __init__(self):
+        super().__init__("Checklist item")
 
 # --- Authorization errors ---
 

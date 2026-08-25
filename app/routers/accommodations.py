@@ -4,7 +4,9 @@ from typing import List
 import uuid
 
 from app.database.db import get_db
-from app.schemas.accommodation import AccommodationCreate, AccommodationUpdate, AccommodationResponse
+from app.schemas.accommodation import (
+    AccommodationCreate, AccommodationUpdate, AccommodationResponse, AccommodationSplitResponse
+)
 from app.services.accommodation_service import AccommodationService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
@@ -27,10 +29,10 @@ async def get_accommodations(
     trip_service = TripService(db)
     if not trip_service.has_view_permission(trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this trip")
-    
+
     service = AccommodationService(db)
     accommodations: List[Accommodation] = service.get_all_by_trip(trip_id)
-    
+
     return [
         AccommodationResponse.model_validate(accommodation)
         for accommodation in accommodations
@@ -45,14 +47,14 @@ async def get_accommodation(
 ) -> AccommodationResponse:
     service = AccommodationService(db)
     accommodation: Accommodation | None = service.get_by_id(accommodation_id)
-    
+
     if not accommodation:
         raise AccommodationNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_view_permission(accommodation.trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this accommodation")
-    
+
     return AccommodationResponse.model_validate(accommodation)
 
 
@@ -65,10 +67,10 @@ async def create_accommodation(
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(accommodation_data.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
+
     service = AccommodationService(db)
     accommodation: Accommodation = service.create(accommodation_data, current_user.id)
-    
+
     return AccommodationResponse.model_validate(accommodation)
 
 
@@ -81,18 +83,18 @@ async def update_accommodation(
 ) -> AccommodationResponse:
     service = AccommodationService(db)
     accommodation: Accommodation | None = service.get_by_id(accommodation_id)
-    
+
     if not accommodation:
         raise AccommodationNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(accommodation.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
-    updated: Accommodation | None = service.update(accommodation_id, accommodation_data)
+
+    updated: Accommodation | None = service.update_with_splits(accommodation_id, accommodation_data)
     if not updated:
         raise AccommodationNotFoundError()
-    
+
     return AccommodationResponse.model_validate(updated)
 
 
@@ -104,12 +106,36 @@ async def delete_accommodation(
 ) -> None:
     service = AccommodationService(db)
     accommodation: Accommodation | None = service.get_by_id(accommodation_id)
-    
+
     if not accommodation:
         raise AccommodationNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(accommodation.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
+
     service.delete(accommodation_id)
+
+
+@router.patch("/{accommodation_id}/splits/{split_id}/pay", response_model=AccommodationSplitResponse)
+async def mark_accommodation_split_paid(
+    accommodation_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> AccommodationSplitResponse:
+    service = AccommodationService(db)
+    split = service.mark_split_as_paid(accommodation_id, split_id, current_user.id)
+    return AccommodationSplitResponse.model_validate(split)
+
+
+@router.patch("/{accommodation_id}/splits/{split_id}/unpay", response_model=AccommodationSplitResponse)
+async def unmark_accommodation_split_paid(
+    accommodation_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> AccommodationSplitResponse:
+    service = AccommodationService(db)
+    split = service.unmark_split_as_paid(accommodation_id, split_id, current_user.id)
+    return AccommodationSplitResponse.model_validate(split)

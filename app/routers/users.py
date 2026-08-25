@@ -3,14 +3,17 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.database.db import get_db
-from app.schemas.user import UserResponse, UserUpdate
+from app.schemas.user import UserResponse, UserUpdate, PasswordChange
 from app.services.user_service import UserService
 from app.auth.dependencies import get_current_active_user
 from app.models.user import User
+from app.core.security import verify_password
 from app.core.exceptions import (
     UserNotFoundError,
-    DuplicateResourceError
+    DuplicateResourceError,
+    InvalidCredentialsError
 )
+from fastapi import status
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -54,3 +57,18 @@ async def get_user_by_id(
         raise UserNotFoundError()
     
     return UserResponse.model_validate(user)
+
+@router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_my_password(
+    password_data: PasswordChange,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> None:
+    if not verify_password(password_data.current_password, current_user.hashed_password):
+        raise InvalidCredentialsError()
+
+    service = UserService(db)
+    service.update(
+        current_user.id,
+        UserUpdate.model_validate({"password": password_data.new_password})
+    )

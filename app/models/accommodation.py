@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from sqlalchemy import String, Date, Numeric, DateTime, ForeignKey, Text, Enum as SQLEnum, CheckConstraint
+from sqlalchemy import Boolean, String, Date, Numeric, DateTime, ForeignKey, Text, Enum as SQLEnum, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database.db import Base
 
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime, date
 from decimal import Decimal
 from app.common.types import AccommodationType
@@ -14,6 +14,7 @@ import uuid
 
 if TYPE_CHECKING:
     from app.models.trip import Trip
+    from app.models.user import User
 
 
 class Accommodation(Base):
@@ -64,6 +65,13 @@ class Accommodation(Base):
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    paid_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True
+    )
+    is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id"),
@@ -86,3 +94,42 @@ class Accommodation(Base):
         "Trip",
         back_populates="accommodations"
     )
+
+    payer: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[paid_by]
+    )
+
+    splits: Mapped[List["AccommodationSplit"]] = relationship(
+        "AccommodationSplit",
+        back_populates="accommodation",
+        cascade="all, delete-orphan"
+    )
+
+
+# ── AccommodationSplit ────────────────────────────────────────────────────────
+
+class AccommodationSplit(Base):
+    __tablename__ = "accommodation_splits"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    accommodation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("accommodations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+
+    accommodation: Mapped[Accommodation] = relationship("Accommodation", back_populates="splits")
+    user: Mapped["User"] = relationship("User")

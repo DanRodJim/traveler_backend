@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     LOG_LEVEL: str = "INFO"
+
+    GROQ_API_KEY: str = ""
     
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),

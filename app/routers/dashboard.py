@@ -15,18 +15,14 @@ async def get_dashboard_stats(
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     service = DashboardService(db)
-    
     trip_ids = service.get_user_trip_ids(current_user.id)
-    
+
     if not trip_ids:
         return {
             "total_trips": 0,
             "trips_by_status": {
-                "planning": 0,
-                "confirmed": 0,
-                "in_progress": 0,
-                "completed": 0,
-                "cancelled": 0
+                "planning": 0, "confirmed": 0, "in_progress": 0,
+                "completed": 0, "cancelled": 0
             },
             "total_expenses": {},
             "expenses_by_category": {},
@@ -37,16 +33,45 @@ async def get_dashboard_stats(
             "activities_by_category": {},
             "accommodations_by_type": {},
         }
-    
+
     return {
         "total_trips": len(trip_ids),
         "trips_by_status": service.get_trips_by_status(trip_ids),
         "total_expenses": service.get_total_expenses_by_currency(trip_ids),
         "expenses_by_category": service.get_expenses_by_category(trip_ids),
-        "expenses_by_trip": service.get_top_trips_by_spending(trip_ids),
+        "expenses_by_trip": await service.get_top_trips_by_spending(trip_ids),  # ✅ await
         "upcoming_activities": service.get_upcoming_activities(trip_ids),
         "next_trip": service.get_next_trip(trip_ids),
         "expenses_by_type": service.get_expenses_by_type(trip_ids),
         "activities_by_category": service.get_activities_by_category(trip_ids),
         "accommodations_by_type": service.get_accommodations_by_type(trip_ids),
+    }
+
+@router.get("/alerts")
+async def get_dashboard_alerts(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    service = DashboardService(db)
+    trip_ids = service.get_user_trip_ids(current_user.id)
+
+    if not trip_ids:
+        return {
+            "pending_splits_owed_by_me": [],
+            "pending_splits_owed_to_me": [],
+            "budget_alerts": [],
+            "personal_budget_alerts": [],  # ✅
+        }
+
+    return {
+        "pending_splits_owed_by_me": service.get_pending_splits_owed_by_me(
+            current_user.id, trip_ids
+        ),
+        "pending_splits_owed_to_me": service.get_pending_splits_owed_to_me(
+            current_user.id, trip_ids
+        ),
+        "budget_alerts": await service.get_budget_alerts(trip_ids),
+        "personal_budget_alerts": await service.get_personal_budget_alerts(  # ✅
+            current_user.id, trip_ids
+        ),
     }

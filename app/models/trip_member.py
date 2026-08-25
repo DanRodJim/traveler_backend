@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from sqlalchemy import DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy import DateTime, ForeignKey, Enum as SQLEnum, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from app.database.db import Base
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from app.common.types import MemberRole
 from datetime import datetime
+from decimal import Decimal
 import uuid
 
 if TYPE_CHECKING:
@@ -44,6 +45,10 @@ class TripMember(Base):
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now()
+    )
+    personal_budget: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2),
+        nullable=True
     )
 
     # Relationships

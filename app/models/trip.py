@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.accommodation import Accommodation
     from app.models.expense import Expense
     from app.models.trip_member import TripMember
+    from app.models.checklist_item import ChecklistItem
 
 
 class Trip(Base):
@@ -101,6 +102,12 @@ class Trip(Base):
     )
     expenses: Mapped[List[Expense]] = relationship(
         "Expense",
+        back_populates="trip",
+        cascade="all, delete-orphan",
+        lazy="select"
+    )
+    checklist_items: Mapped[List[ChecklistItem]] = relationship(
+        "ChecklistItem",
         back_populates="trip",
         cascade="all, delete-orphan",
         lazy="select"

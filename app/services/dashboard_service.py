@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
-from app.models import Accommodation, Activity, Expense, Flight, Trip, TripMember
+from app.models import Accommodation, Activity, Expense, ExpenseSplit, Flight, Trip, TripMember
+from app.services.budget_service import BudgetService
+from app.services.personal_budget_service import PersonalBudgetService
 
 class DashboardService:
     def __init__(self, db: Session):
@@ -143,68 +145,22 @@ class DashboardService:
         
         return expense_type_totals
     
-    def get_top_trips_by_spending(self, trip_ids: List[uuid.UUID], limit: int = 5) -> List[Dict[str, Any]]:
-        expense_subquery = self.db.query(
-            Expense.trip_id,
-            func.sum(Expense.amount).label('expense_total')
-        ).filter(
-            Expense.trip_id.in_(trip_ids)
-        ).group_by(Expense.trip_id).subquery()
-        
-        activity_subquery = self.db.query(
-            Activity.trip_id,
-            func.sum(Activity.cost).label('activity_total')
-        ).filter(
-            Activity.trip_id.in_(trip_ids),
-            Activity.cost.isnot(None)
-        ).group_by(Activity.trip_id).subquery()
-        
-        flight_subquery = self.db.query(
-            Flight.trip_id,
-            func.sum(Flight.cost).label('flight_total')
-        ).filter(
-            Flight.trip_id.in_(trip_ids),
-            Flight.cost.isnot(None)
-        ).group_by(Flight.trip_id).subquery()
-        
-        accommodation_subquery = self.db.query(
-            Accommodation.trip_id,
-            func.sum(Accommodation.cost).label('accommodation_total')
-        ).filter(
-            Accommodation.trip_id.in_(trip_ids),
-            Accommodation.cost.isnot(None)
-        ).group_by(Accommodation.trip_id).subquery()
-        
-        total_column = (
-            func.coalesce(expense_subquery.c.expense_total, 0) +
-            func.coalesce(activity_subquery.c.activity_total, 0) +
-            func.coalesce(flight_subquery.c.flight_total, 0) +
-            func.coalesce(accommodation_subquery.c.accommodation_total, 0)
-        ).label('total_cost')
-        
-        trip_totals = self.db.query(
-            Trip.id,
-            Trip.title,
-            total_column
-        ).outerjoin(
-            expense_subquery, Trip.id == expense_subquery.c.trip_id
-        ).outerjoin(
-            activity_subquery, Trip.id == activity_subquery.c.trip_id
-        ).outerjoin(
-            flight_subquery, Trip.id == flight_subquery.c.trip_id
-        ).outerjoin(
-            accommodation_subquery, Trip.id == accommodation_subquery.c.trip_id
-        ).filter(
-            Trip.id.in_(trip_ids)
-        ).order_by(
-            total_column.desc()
-        ).limit(limit).all()
-        
-        return [
-            {"trip": title, "amount": float(total)} 
-            for _, title, total in trip_totals
-            if total > 0
-        ]
+    async def get_top_trips_by_spending(self, trip_ids: list, limit: int = 5) -> list:
+        trips = self.db.query(Trip).filter(Trip.id.in_(trip_ids)).all()
+
+        budget_service = BudgetService(self.db)
+        results = []
+
+        for trip in trips:
+            spending = await budget_service.calculate_trip_spending(trip.id)
+            if spending["total_spent"] > 0:
+                results.append({
+                    "trip": trip.title,
+                    "amount": round(spending["total_spent"], 2),
+                })
+
+        results.sort(key=lambda x: x["amount"], reverse=True)
+        return results[:limit]
     
     def get_upcoming_activities(self, trip_ids: List[uuid.UUID], days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
         today = datetime.now().date()
@@ -272,3 +228,138 @@ class DashboardService:
         return {
             acc_type: count for acc_type, count in accommodations_by_type
         }
+
+    def get_pending_splits_owed_by_me(
+        self,
+        current_user_id: uuid.UUID,
+        trip_ids: list
+    ) -> list:
+        results = (
+            self.db.query(ExpenseSplit, Expense, Trip)
+            .join(Expense, ExpenseSplit.expense_id == Expense.id)
+            .join(Trip, Expense.trip_id == Trip.id)
+            .filter(
+                Expense.trip_id.in_(trip_ids),
+                ExpenseSplit.user_id == current_user_id,
+                ExpenseSplit.is_paid == False,
+                Expense.paid_by != current_user_id,
+            )
+            .all()
+        )
+
+        return [
+            {
+                "split_id": str(split.id),
+                "expense_title": expense.title,
+                "trip_id": str(trip.id),
+                "trip_title": trip.title,
+                "amount": float(split.amount),
+                "currency": expense.currency,
+                "paid_by": str(expense.paid_by),
+            }
+            for split, expense, trip in results
+        ]
+
+    def get_pending_splits_owed_to_me(
+        self,
+        current_user_id: uuid.UUID,
+        trip_ids: list
+    ) -> list:
+        results = (
+            self.db.query(ExpenseSplit, Expense, Trip)
+            .join(Expense, ExpenseSplit.expense_id == Expense.id)
+            .join(Trip, Expense.trip_id == Trip.id)
+            .filter(
+                Expense.trip_id.in_(trip_ids),
+                Expense.paid_by == current_user_id,
+                ExpenseSplit.user_id != current_user_id,
+                ExpenseSplit.is_paid == False,
+            )
+            .all()
+        )
+
+        return [
+            {
+                "split_id": str(split.id),
+                "expense_title": expense.title,
+                "trip_id": str(trip.id),
+                "trip_title": trip.title,
+                "amount": float(split.amount),
+                "currency": expense.currency,
+                "owed_by": str(split.user_id),
+            }
+            for split, expense, trip in results
+        ]
+
+    async def get_budget_alerts(self, trip_ids: list) -> list:
+        trips = (
+            self.db.query(Trip)
+            .filter(
+                Trip.id.in_(trip_ids),
+                Trip.budget.isnot(None),
+                Trip.status.notin_(["completed", "cancelled"])
+            )
+            .all()
+        )
+
+        budget_service = BudgetService(self.db)
+        alerts = []
+
+        for trip in trips:
+            summary = await budget_service.get_trip_budget_summary(trip.id)
+
+            if not summary.get("has_budget"):
+                continue
+
+            percentage = summary["percentage"]
+            if percentage >= 80:
+                alerts.append({
+                    "trip_id": str(trip.id),
+                    "trip_title": trip.title,
+                    "budget": summary["budget"],
+                    "spent": summary["total_spent"],
+                    "currency": summary["currency"],
+                    "percentage": percentage,
+                    "is_over_budget": summary["is_over_budget"],
+                })
+
+        return sorted(alerts, key=lambda x: x["percentage"], reverse=True)
+
+    async def get_personal_budget_alerts(
+        self,
+        current_user_id: uuid.UUID,
+        trip_ids: list
+    ) -> list:
+        trips = (
+            self.db.query(Trip)
+            .filter(
+                Trip.id.in_(trip_ids),
+                Trip.status.notin_(["completed", "cancelled"])
+            )
+            .all()
+        )
+
+        personal_budget_service = PersonalBudgetService(self.db)
+        alerts = []
+
+        for trip in trips:
+            summary = await personal_budget_service.get_personal_budget_summary(
+                trip.id, current_user_id
+            )
+
+            if not summary.get("has_budget"):
+                continue
+
+            percentage = summary["percentage"]
+            if percentage >= 80:
+                alerts.append({
+                    "trip_id": str(trip.id),
+                    "trip_title": trip.title,
+                    "budget": summary["budget"],
+                    "spent": summary["total_spent"],
+                    "currency": summary["currency"],
+                    "percentage": percentage,
+                    "is_over_budget": summary["is_over_budget"],
+                })
+
+        return sorted(alerts, key=lambda x: x["percentage"], reverse=True)

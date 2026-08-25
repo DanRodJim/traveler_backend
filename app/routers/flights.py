@@ -4,7 +4,7 @@ from typing import List
 import uuid
 
 from app.database.db import get_db
-from app.schemas.flight import FlightCreate, FlightUpdate, FlightResponse
+from app.schemas.flight import FlightCreate, FlightUpdate, FlightResponse, FlightSplitResponse
 from app.services.flight_service import FlightService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
@@ -27,10 +27,10 @@ async def get_flights(
     trip_service = TripService(db)
     if not trip_service.has_view_permission(trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this trip")
-    
+
     service = FlightService(db)
     flights: List[Flight] = service.get_all_by_trip(trip_id)
-    
+
     return [FlightResponse.model_validate(flight) for flight in flights]
 
 
@@ -42,14 +42,14 @@ async def get_flight(
 ) -> FlightResponse:
     service = FlightService(db)
     flight: Flight | None = service.get_by_id(flight_id)
-    
+
     if not flight:
         raise FlightNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_view_permission(flight.trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this flight")
-    
+
     return FlightResponse.model_validate(flight)
 
 
@@ -62,10 +62,10 @@ async def create_flight(
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(flight_data.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
+
     service = FlightService(db)
     flight: Flight = service.create(flight_data, current_user.id)
-    
+
     return FlightResponse.model_validate(flight)
 
 
@@ -78,18 +78,18 @@ async def update_flight(
 ) -> FlightResponse:
     service = FlightService(db)
     flight: Flight | None = service.get_by_id(flight_id)
-    
+
     if not flight:
         raise FlightNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(flight.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
-    updated: Flight | None = service.update(flight_id, flight_data)
+
+    updated: Flight | None = service.update_with_splits(flight_id, flight_data)
     if not updated:
         raise FlightNotFoundError()
-    
+
     return FlightResponse.model_validate(updated)
 
 
@@ -101,12 +101,36 @@ async def delete_flight(
 ) -> None:
     service = FlightService(db)
     flight: Flight | None = service.get_by_id(flight_id)
-    
+
     if not flight:
         raise FlightNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_edit_permission(flight.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
-    
+
     service.delete(flight_id)
+
+
+@router.patch("/{flight_id}/splits/{split_id}/pay", response_model=FlightSplitResponse)
+async def mark_flight_split_paid(
+    flight_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> FlightSplitResponse:
+    service = FlightService(db)
+    split = service.mark_split_as_paid(flight_id, split_id, current_user.id)
+    return FlightSplitResponse.model_validate(split)
+
+
+@router.patch("/{flight_id}/splits/{split_id}/unpay", response_model=FlightSplitResponse)
+async def unmark_flight_split_paid(
+    flight_id: uuid.UUID,
+    split_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> FlightSplitResponse:
+    service = FlightService(db)
+    split = service.unmark_split_as_paid(flight_id, split_id, current_user.id)
+    return FlightSplitResponse.model_validate(split)

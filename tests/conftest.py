@@ -10,7 +10,7 @@ from datetime import date, time, timedelta
 from dotenv import load_dotenv
 import logging  # ✅ Agregar
 
-# ✅ Desactivar logs durante tests
+# Desactivar logs durante tests
 logging.disable(logging.CRITICAL)
 
 # Cargar variables de entorno de .env.test
@@ -23,13 +23,14 @@ from app.main import app
 from app.database.db import Base, get_db
 from app.core.security import get_password_hash
 from app.models.user import User
-from app.models.trip import Trip, TripStatus, TripMember, MemberRole
+from app.models.trip import Trip, TripStatus, TripMember
 from app.models.activity import Activity, ActivityCategory
 from app.models.flight import Flight
 from app.models.accommodation import Accommodation, AccommodationType
 from app.models.expense import Expense, ExpenseCategory
+from app.common.types import MemberRole
 
-# ✅ PostgreSQL en Docker para tests (puerto 5433)
+# PostgreSQL en Docker para tests (puerto 5433)
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+psycopg://test_user:test_password@localhost:5433/test_travel_planner"
@@ -226,7 +227,7 @@ def test_trip_member(db, test_trip, test_user2) -> TripMember:
         id=uuid.uuid4(),
         trip_id=test_trip.id,
         user_id=test_user2.id,
-        role=MemberRole.editor
+        role=MemberRole.EDITOR
     )
     db.add(member)
     db.commit()

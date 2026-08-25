@@ -19,6 +19,10 @@ class UserUpdate(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
+class PasswordChange(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6)
+
 class UserResponse(UserBase):
     id: uuid.UUID
     is_active: bool
