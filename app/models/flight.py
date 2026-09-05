@@ -11,6 +11,8 @@ from datetime import datetime, date, time
 from decimal import Decimal
 import uuid
 
+USERID = "users.id"
+
 if TYPE_CHECKING:
     from app.models.trip import Trip
     from app.models.user import User
@@ -52,14 +54,14 @@ class Flight(Base):
 
     paid_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id"),
+        ForeignKey(USERID),
         nullable=True
     )
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id"),
+        ForeignKey(USERID),
         nullable=False,
         index=True
     )
@@ -103,7 +105,7 @@ class FlightSplit(Base):
         UUID(as_uuid=True), ForeignKey("flights.id", ondelete="CASCADE"), nullable=False, index=True
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(USERID, ondelete="CASCADE"), nullable=False, index=True
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

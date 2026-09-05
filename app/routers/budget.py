@@ -23,6 +23,7 @@ async def get_trip_budget_summary(
     service = BudgetService(db)
     return await service.get_trip_budget_summary(trip_id)
 
+
 @router.get("/trip/{trip_id}/me")
 async def get_my_personal_budget_summary(
     trip_id: uuid.UUID,

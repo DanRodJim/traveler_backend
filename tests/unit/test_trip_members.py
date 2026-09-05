@@ -49,7 +49,6 @@ class TestTripMembers:
             }
         )
         
-        # ✅ Ahora es 400 (DuplicateResourceError)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         data = response.json()
         assert data["error"] == "DuplicateResourceError"
@@ -67,7 +66,6 @@ class TestTripMembers:
             }
         )
         
-        # ✅ Cambiado: 403 porque no es owner
         assert response.status_code == status.HTTP_403_FORBIDDEN
         data = response.json()
         assert "error" in data
@@ -95,7 +93,6 @@ class TestTripMembers:
             json={"role": "viewer"}
         )
         
-        # ✅ 403 (NotTripOwnerError)
         assert response.status_code == status.HTTP_403_FORBIDDEN
         data = response.json()
         assert data["error"] == "NotTripOwnerError"
@@ -110,7 +107,6 @@ class TestTripMembers:
             }
         )
         
-        # ✅ Cambiado: 403 porque no se puede cambiar rol del owner
         assert response.status_code == status.HTTP_403_FORBIDDEN
         data = response.json()
         assert "error" in data
@@ -141,7 +137,6 @@ class TestTripMembers:
             headers=auth_headers2
         )
         
-        # ✅ Cambiado: 403 porque no es owner
         assert response.status_code == status.HTTP_403_FORBIDDEN
         data = response.json()
         assert "error" in data
@@ -157,7 +152,6 @@ class TestTripMembers:
             headers=auth_headers
         )
         
-        # ✅ 404 (ResourceNotFoundError)
         assert response.status_code == status.HTTP_404_NOT_FOUND
         data = response.json()
         assert data["error"] == "ResourceNotFoundError"

@@ -5,7 +5,7 @@ from pydantic import ValidationError as PydanticValidationError
 import logging
 from contextlib import asynccontextmanager
 
-from app.routers import auth, calendar, dashboard, pdf, users, trips, activities, flights, accommodations, expenses, balances, budget, ai_estimator, checklists
+from app.routers import auth, calendar, dashboard, invitations, notifications, pdf, users, trips, activities, flights, accommodations, expenses, balances, budget, ai_estimator, checklists
 from app.database.db import engine, Base
 from app.core.config import settings
 from app.core.exceptions import AppException
@@ -27,13 +27,13 @@ async def lifespan(_: FastAPI):
     # Startup
     logger.info(f"Tabibito: {settings.PROJECT_NAME} v{settings.VERSION} starting...")
     
-    Base.metadata.create_all(bind=engine)
+    # Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified")
     
     logger.info(f"Environment: {settings.ENV}")
     
     if settings.is_development():
-        logger.info(f"API Docs: http://localhost:8000/api/docs")
+        logger.info("API Docs: http://localhost:8000/api/docs")
         logger.info("Development mode - Debug enabled")
     elif settings.is_production():
         logger.info("Production mode - Optimized for performance")
@@ -89,6 +89,8 @@ app.include_router(ai_estimator.router)
 app.include_router(checklists.router)
 app.include_router(calendar.router)
 app.include_router(pdf.router)
+app.include_router(notifications.router)
+app.include_router(invitations.router)
 
 logger.info("Routers registered")
 

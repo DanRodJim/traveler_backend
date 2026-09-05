@@ -12,6 +12,8 @@ from decimal import Decimal
 from app.common.types import AccommodationType
 import uuid
 
+USERID = "users.id"
+
 if TYPE_CHECKING:
     from app.models.trip import Trip
     from app.models.user import User
@@ -61,20 +63,25 @@ class Accommodation(Base):
         Numeric(12, 2),
         nullable=True
     )
+
     currency: Mapped[Optional[str]] = mapped_column(String(3), nullable=True, default="USD")
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    latitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6), nullable=True)
+    longitude: Mapped[Optional[Decimal]] = mapped_column(Numeric(9, 6), nullable=True)
+
     paid_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id"),
+        ForeignKey(USERID),
         nullable=True
     )
+
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id"),
+        ForeignKey(USERID),
         nullable=False,
         index=True
     )
@@ -119,7 +126,7 @@ class AccommodationSplit(Base):
         UUID(as_uuid=True), ForeignKey("accommodations.id", ondelete="CASCADE"), nullable=False, index=True
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True), ForeignKey(USERID, ondelete="CASCADE"), nullable=False, index=True
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.database.db import get_db
-from app.schemas.user import UserResponse, UserUpdate, PasswordChange
+from app.schemas.user import NotificationPreferenceUpdate, UserResponse, UserUpdate, PasswordChange
 from app.services.user_service import UserService
 from app.auth.dependencies import get_current_active_user
 from app.models.user import User
@@ -18,14 +18,14 @@ from fastapi import status
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me")
 async def get_my_profile(
     current_user: User = Depends(get_current_active_user)
 ) -> UserResponse:
     return UserResponse.model_validate(current_user)
 
 
-@router.put("/me", response_model=UserResponse)
+@router.put("/me")
 async def update_my_profile(
     user_data: UserUpdate,
     current_user: User = Depends(get_current_active_user),
@@ -45,9 +45,10 @@ async def update_my_profile(
     return UserResponse.model_validate(updated_user)
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}")
 async def get_user_by_id(
     user_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> UserResponse:
     service = UserService(db)
@@ -72,3 +73,21 @@ async def change_my_password(
         current_user.id,
         UserUpdate.model_validate({"password": password_data.new_password})
     )
+
+
+@router.put("/me/notification-preferences")
+async def update_notification_preferences(
+    preference_data: NotificationPreferenceUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> UserResponse:
+    service = UserService(db)
+    updated_user = service.update(
+        current_user.id,
+        UserUpdate.model_validate({
+            "email_notification_preference": preference_data.email_notification_preference
+        })
+    )
+    if not updated_user:
+        raise UserNotFoundError()
+    return UserResponse.model_validate(updated_user)

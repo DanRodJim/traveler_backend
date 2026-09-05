@@ -1,20 +1,15 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter
 from typing import List, Dict
-
-from app.database.db import get_db
-from app.models.user import User
 from app.services.calendar_service import CalendarService
 from app.services.dashboard_service import DashboardService
-from app.auth.dependencies import get_current_active_user
+from app.auth.dependencies import CurrentUser, DbSession
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
 
-@router.get("/events", response_model=List[Dict])
+@router.get("/events")
 async def get_calendar_events(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: CurrentUser, db: DbSession
 ) -> List[Dict]:
     dashboard_service = DashboardService(db)
     trip_ids = dashboard_service.get_user_trip_ids(current_user.id)

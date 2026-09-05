@@ -36,3 +36,4 @@ class AiEstimatorResponse(BaseModel):
     notes: str
     travel_style: str
     start_date: Optional[str] = None
+    end_date: Optional[str] = None

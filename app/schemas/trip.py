@@ -8,9 +8,8 @@ import uuid
 from app.core.exceptions import InvalidDateRangeError
 
 def validate_date_range(start: Optional[date], end: Optional[date]) -> None:
-    if start is not None and end is not None:
-        if end <= start:
-            raise InvalidDateRangeError("dates")
+    if (start is not None and end is not None) and (end <= start):
+        raise InvalidDateRangeError("dates")
 
 class TripBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)

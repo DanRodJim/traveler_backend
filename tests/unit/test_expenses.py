@@ -53,7 +53,6 @@ class TestExpenses:
             }
         )
         
-        # ✅ Debug si falla
         if response.status_code != status.HTTP_201_CREATED:
             print(f"\n❌ Status: {response.status_code}")
             print(f"❌ Response: {response.json()}")

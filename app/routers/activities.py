@@ -20,7 +20,7 @@ from app.core.exceptions import (
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 
-@router.get("/", response_model=List[ActivityResponse])
+@router.get("/")
 async def get_activities(
     trip_id: uuid.UUID,
     date: Optional[str] = None,
@@ -41,7 +41,7 @@ async def get_activities(
     return [ActivityResponse.model_validate(activity) for activity in activities]
 
 
-@router.get("/{activity_id}", response_model=ActivityResponse)
+@router.get("/{activity_id}")
 async def get_activity(
     activity_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -60,7 +60,7 @@ async def get_activity(
     return ActivityResponse.model_validate(activity)
 
 
-@router.post("/", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_activity(
     activity_data: ActivityCreate,
     current_user: User = Depends(get_current_active_user),
@@ -71,12 +71,12 @@ async def create_activity(
         raise InsufficientPermissionsError("editor")
 
     service = ActivityService(db)
-    activity: Activity = service.create(activity_data, current_user.id)
+    activity: Activity = await service.create(activity_data, current_user.id)
 
     return ActivityResponse.model_validate(activity)
 
 
-@router.put("/{activity_id}", response_model=ActivityResponse)
+@router.put("/{activity_id}")
 async def update_activity(
     activity_id: uuid.UUID,
     activity_data: ActivityUpdate,
@@ -93,7 +93,7 @@ async def update_activity(
     if not trip_service.has_edit_permission(activity.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
 
-    updated: Activity | None = service.update_with_splits(activity_id, activity_data)
+    updated: Activity | None = await service.update_with_splits(activity_id, activity_data)
     if not updated:
         raise ActivityNotFoundError()
 
@@ -119,7 +119,7 @@ async def delete_activity(
     service.delete(activity_id)
 
 
-@router.patch("/{activity_id}/splits/{split_id}/pay", response_model=ActivitySplitResponse)
+@router.patch("/{activity_id}/splits/{split_id}/pay")
 async def mark_activity_split_paid(
     activity_id: uuid.UUID,
     split_id: uuid.UUID,
@@ -131,7 +131,7 @@ async def mark_activity_split_paid(
     return ActivitySplitResponse.model_validate(split)
 
 
-@router.patch("/{activity_id}/splits/{split_id}/unpay", response_model=ActivitySplitResponse)
+@router.patch("/{activity_id}/splits/{split_id}/unpay")
 async def unmark_activity_split_paid(
     activity_id: uuid.UUID,
     split_id: uuid.UUID,

@@ -11,6 +11,7 @@ from app.core.exceptions import (
 )
 from app.models.accommodation import Accommodation, AccommodationSplit
 from app.schemas.accommodation import AccommodationCreate, AccommodationUpdate
+from app.services.geocoding_service import geocode_address
 
 
 class AccommodationService:
@@ -25,10 +26,17 @@ class AccommodationService:
     def get_by_id(self, accommodation_id: uuid.UUID) -> Optional[Accommodation]:
         return self.db.query(Accommodation).filter(Accommodation.id == accommodation_id).first()
 
-    def create_with_splits(
+    async def create_with_splits(
         self, accommodation_data: AccommodationCreate, created_by: uuid.UUID
     ) -> Accommodation:
         accommodation_dict = accommodation_data.model_dump(exclude={'splits'})
+
+        if accommodation_dict.get('address') and not accommodation_dict.get('latitude'):
+                    coords = await geocode_address(accommodation_dict['address'])
+                    if coords:
+                        accommodation_dict['latitude'] = coords[0]
+                        accommodation_dict['longitude'] = coords[1]
+
         accommodation = Accommodation(
             id=uuid.uuid4(),
             created_by=created_by,
@@ -55,10 +63,10 @@ class AccommodationService:
         self.db.refresh(accommodation)
         return accommodation
 
-    def create(self, accommodation_data: AccommodationCreate, created_by: uuid.UUID) -> Accommodation:
-        return self.create_with_splits(accommodation_data, created_by)
+    async def create(self, accommodation_data: AccommodationCreate, created_by: uuid.UUID) -> Accommodation:
+        return await self.create_with_splits(accommodation_data, created_by)
 
-    def update_with_splits(
+    async def update_with_splits(
         self, accommodation_id: uuid.UUID, accommodation_data: AccommodationUpdate
     ) -> Optional[Accommodation]:
         accommodation = self.get_by_id(accommodation_id)
@@ -66,6 +74,12 @@ class AccommodationService:
             return None
 
         update_dict = accommodation_data.model_dump(exclude={'splits'}, exclude_unset=True)
+
+        if 'address' in update_dict and update_dict['address'] and 'latitude' not in update_dict:
+                    coords = await geocode_address(update_dict['address'])
+                    if coords:
+                        update_dict['latitude'] = coords[0]
+                        update_dict['longitude'] = coords[1]
 
         new_start = update_dict.get("check_in_date", accommodation.check_in_date)
         new_end = update_dict.get("check_out_date", accommodation.check_out_date)
@@ -98,8 +112,8 @@ class AccommodationService:
         self.db.refresh(accommodation)
         return accommodation
 
-    def update(self, accommodation_id: uuid.UUID, accommodation_data: AccommodationUpdate) -> Optional[Accommodation]:
-        return self.update_with_splits(accommodation_id, accommodation_data)
+    async def update(self, accommodation_id: uuid.UUID, accommodation_data: AccommodationUpdate) -> Optional[Accommodation]:
+        return await self.update_with_splits(accommodation_id, accommodation_data)
 
     def delete(self, accommodation_id: uuid.UUID) -> bool:
         accommodation = self.get_by_id(accommodation_id)

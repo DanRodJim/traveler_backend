@@ -11,6 +11,7 @@ from app.core.exceptions import (
 )
 from app.models.activity import Activity, ActivitySplit
 from app.schemas.activity import ActivityCreate, ActivityUpdate
+from app.services.geocoding_service import geocode_address
 
 
 class ActivityService:
@@ -33,8 +34,15 @@ class ActivityService:
     def get_by_id(self, activity_id: uuid.UUID) -> Optional[Activity]:
         return self.db.query(Activity).filter(Activity.id == activity_id).first()
 
-    def create_with_splits(self, activity_data: ActivityCreate, created_by: uuid.UUID) -> Activity:
+    async def create_with_splits(self, activity_data: ActivityCreate, created_by: uuid.UUID) -> Activity:
         activity_dict = activity_data.model_dump(exclude={'splits'})
+
+        if activity_dict.get('address') and not activity_dict.get('latitude'):
+            coords = await geocode_address(activity_dict['address'])
+            if coords:
+                activity_dict['latitude'] = coords[0]
+                activity_dict['longitude'] = coords[1]
+
         activity = Activity(
             id=uuid.uuid4(),
             created_by=created_by,
@@ -61,10 +69,10 @@ class ActivityService:
         self.db.refresh(activity)
         return activity
 
-    def create(self, activity_data: ActivityCreate, created_by: uuid.UUID) -> Activity:
-        return self.create_with_splits(activity_data, created_by)
+    async def create(self, activity_data: ActivityCreate, created_by: uuid.UUID) -> Activity:
+        return await self.create_with_splits(activity_data, created_by)
 
-    def update_with_splits(
+    async def update_with_splits(
         self, activity_id: uuid.UUID, activity_data: ActivityUpdate
     ) -> Optional[Activity]:
         activity = self.get_by_id(activity_id)
@@ -72,6 +80,12 @@ class ActivityService:
             return None
 
         update_dict = activity_data.model_dump(exclude={'splits'}, exclude_unset=True)
+
+        if 'address' in update_dict and update_dict['address'] and 'latitude' not in update_dict:
+            coords = await geocode_address(update_dict['address'])
+            if coords:
+                update_dict['latitude'] = coords[0]
+                update_dict['longitude'] = coords[1]
 
         new_start = update_dict.get("start_time", activity.start_time)
         new_end = update_dict.get("end_time", activity.end_time)
@@ -104,8 +118,8 @@ class ActivityService:
         self.db.refresh(activity)
         return activity
 
-    def update(self, activity_id: uuid.UUID, activity_data: ActivityUpdate) -> Optional[Activity]:
-        return self.update_with_splits(activity_id, activity_data)
+    async def update(self, activity_id: uuid.UUID, activity_data: ActivityUpdate) -> Optional[Activity]:
+        return await self.update_with_splits(activity_id, activity_data)
 
     def delete(self, activity_id: uuid.UUID) -> bool:
         activity = self.get_by_id(activity_id)

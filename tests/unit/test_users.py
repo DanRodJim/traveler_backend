@@ -50,7 +50,6 @@ class TestUsers:
         
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         data = response.json()
-        # ✅ Cambiar de 'detail' a 'message'
         assert "error" in data
         assert data["error"] == "DuplicateResourceError"
         assert "already" in data["message"].lower() or "exist" in data["message"].lower()

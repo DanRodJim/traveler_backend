@@ -12,6 +12,8 @@ from app.common.types import TripStatus
 from datetime import datetime, date
 import uuid
 
+DEL_ALL_ORPHAN = "all, delete-orphan"
+
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.activity import Activity
@@ -79,36 +81,36 @@ class Trip(Base):
     members: Mapped[List[TripMember]] = relationship(
         "TripMember",
         back_populates="trip",
-        cascade="all, delete-orphan",
+        cascade=DEL_ALL_ORPHAN,
         lazy="select"
     )
     activities: Mapped[List[Activity]] = relationship(
         "Activity",
         back_populates="trip",
-        cascade="all, delete-orphan",
+        cascade=DEL_ALL_ORPHAN,
         lazy="select"
     )
     flights: Mapped[List[Flight]] = relationship(
         "Flight",
         back_populates="trip",
-        cascade="all, delete-orphan",
+        cascade=DEL_ALL_ORPHAN,
         lazy="select"
     )
     accommodations: Mapped[List[Accommodation]] = relationship(
         "Accommodation",
         back_populates="trip",
-        cascade="all, delete-orphan",
+        cascade=DEL_ALL_ORPHAN,
         lazy="select"
     )
     expenses: Mapped[List[Expense]] = relationship(
         "Expense",
         back_populates="trip",
-        cascade="all, delete-orphan",
+        cascade=DEL_ALL_ORPHAN,
         lazy="select"
     )
     checklist_items: Mapped[List[ChecklistItem]] = relationship(
         "ChecklistItem",
         back_populates="trip",
-        cascade="all, delete-orphan",
+        cascade=DEL_ALL_ORPHAN,
         lazy="select"
     )

@@ -1,12 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 from typing import Dict
 import uuid
 
 from app.database.db import get_db
 from app.models.user import User
-from app.models.trip_member import TripMember
 from app.services.balance_service import BalanceService
 from app.auth.dependencies import get_current_active_user
 from app.schemas.balance import SettleRequest

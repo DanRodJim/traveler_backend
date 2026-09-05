@@ -54,7 +54,6 @@ class TestTrips:
             }
         )
         
-        # ✅ Ahora es 400 con error handling
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         data = response.json()
         assert "error" in data

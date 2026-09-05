@@ -4,6 +4,8 @@ from typing import Optional, List
 from decimal import Decimal
 import uuid
 
+PATTERN = r'^[A-Z]{3}$'
+
 # ── FlightSplit schemas ─────────────────────────────────────────────────────
 
 class FlightSplitCreate(BaseModel):
@@ -29,15 +31,15 @@ class FlightSplitResponse(BaseModel):
 class FlightBase(BaseModel):
     airline: Optional[str] = Field(None, max_length=100)
     flight_number: Optional[str] = Field(None, max_length=20)
-    departure_airport: str = Field(..., min_length=3, max_length=3, pattern=r'^[A-Z]{3}$')
-    arrival_airport: str = Field(..., min_length=3, max_length=3, pattern=r'^[A-Z]{3}$')
+    departure_airport: str = Field(..., min_length=3, max_length=3, pattern=PATTERN)
+    arrival_airport: str = Field(..., min_length=3, max_length=3, pattern=PATTERN)
     departure_date: date
     departure_time: Optional[time] = None
     arrival_date: date
     arrival_time: Optional[time] = None
     booking_reference: Optional[str] = Field(None, max_length=50)
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    currency: Optional[str] = Field(default="USD", pattern=r'^[A-Z]{3}$')
+    currency: Optional[str] = Field(default="USD", pattern=PATTERN)
     notes: Optional[str] = None
     paid_by: Optional[uuid.UUID] = None
     is_private: bool = True
@@ -59,15 +61,15 @@ class FlightCreate(FlightBase):
 class FlightUpdate(BaseModel):
     airline: Optional[str] = Field(None, max_length=100)
     flight_number: Optional[str] = Field(None, max_length=20)
-    departure_airport: Optional[str] = Field(None, min_length=3, max_length=3, pattern=r'^[A-Z]{3}$')
-    arrival_airport: Optional[str] = Field(None, min_length=3, max_length=3, pattern=r'^[A-Z]{3}$')
+    departure_airport: Optional[str] = Field(None, min_length=3, max_length=3, pattern=PATTERN)
+    arrival_airport: Optional[str] = Field(None, min_length=3, max_length=3, pattern=PATTERN)
     departure_date: Optional[date] = None
     departure_time: Optional[time] = None
     arrival_date: Optional[date] = None
     arrival_time: Optional[time] = None
     booking_reference: Optional[str] = Field(None, max_length=50)
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    currency: Optional[str] = Field(None, pattern=r'^[A-Z]{3}$')
+    currency: Optional[str] = Field(None, pattern=PATTERN)
     notes: Optional[str] = None
     paid_by: Optional[uuid.UUID] = None
     is_private: Optional[bool] = None

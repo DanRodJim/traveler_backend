@@ -196,7 +196,6 @@ class PersonalBudgetService:
         base_currency = (trip.currency if trip else None) or "USD"
         rates = await get_exchange_rates(base_currency)
 
-        # ✅ Ahora cada item es (objeto, monto, moneda) — solo usamos monto y moneda aquí
         expense_items = self.get_my_expense_line_items(trip_id, user_id)
         flight_items = self.get_my_flight_line_items(trip_id, user_id)
         accommodation_items = self.get_my_accommodation_line_items(trip_id, user_id)

@@ -9,8 +9,9 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Flowable
 )
+from typing import List
 
 from app.models.trip import Trip
 from app.models.activity import Activity
@@ -30,6 +31,8 @@ class PdfNotFoundError(ResourceNotFoundError):
 
 PRIMARY_COLOR = colors.HexColor("#2563eb")
 LIGHT_GRAY = colors.HexColor("#f3f4f6")
+DATE_FORMAT = "%b %d, %Y"
+YOUR_SHARE = "Your Share"
 
 
 class PdfService:
@@ -53,7 +56,7 @@ class PdfService:
             raise PdfNotFoundError()
         return trip
 
-    def _header(self, trip: Trip) -> list:
+    def _header(self, trip: Trip) -> List[Flowable]:
         return [
             Paragraph(trip.title, self.styles["TripTitle"]),
             Spacer(1, 4),
@@ -65,7 +68,50 @@ class PdfService:
             Spacer(1, 0.1 * inch),
         ]
 
+    def _add_section(self, elements: List[Flowable], title: str, header_row: list, rows: list) -> None:
+        if not rows:
+            return
+        elements.append(Paragraph(title, self.styles["SectionHeader"]))
+        elements.append(self._build_table([header_row] + rows))
+        elements.append(Spacer(1, 0.15 * inch))
+
     # ── Itinerary PDF ────────────────────────────────────────
+
+    @staticmethod
+    def _format_flight_row(f: Flight) -> list:
+        departure = f.departure_date.strftime(DATE_FORMAT) + (
+            f" {f.departure_time.strftime('%H:%M')}" if f.departure_time else ""
+        )
+        arrival = f.arrival_date.strftime(DATE_FORMAT) + (
+            f" {f.arrival_time.strftime('%H:%M')}" if f.arrival_time else ""
+        )
+        return [
+            f"{f.departure_airport} → {f.arrival_airport}",
+            departure,
+            arrival,
+            f.airline or "-",
+            f.booking_reference or "-",
+        ]
+
+    @staticmethod
+    def _format_accommodation_itinerary_row(a: Accommodation) -> list:
+        return [
+            a.name,
+            a.type.capitalize(),
+            a.check_in_date.strftime(DATE_FORMAT),
+            a.check_out_date.strftime(DATE_FORMAT),
+            a.booking_reference or "-",
+        ]
+
+    @staticmethod
+    def _format_activity_itinerary_row(act: Activity) -> list:
+        return [
+            act.activity_date.strftime(DATE_FORMAT),
+            act.start_time.strftime("%H:%M") if act.start_time else "-",
+            act.title,
+            act.category.capitalize(),
+            act.location or "-",
+        ]
 
     def generate_itinerary_pdf(self, trip_id: uuid.UUID) -> BytesIO:
         trip = self._get_trip(trip_id)
@@ -83,44 +129,21 @@ class PdfService:
         doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.6*inch, bottomMargin=0.6*inch)
         elements = self._header(trip)
 
-        if flights:
-            elements.append(Paragraph("Flights", self.styles["SectionHeader"]))
-            data = [["Route", "Departure", "Arrival", "Airline", "Ref"]]
-            for f in sorted(flights, key=lambda x: x.departure_date):
-                data.append([
-                    f"{f.departure_airport} → {f.arrival_airport}",
-                    f.departure_date.strftime("%b %d, %Y") + (f" {f.departure_time.strftime('%H:%M')}" if f.departure_time else ""),
-                    f.arrival_date.strftime("%b %d, %Y") + (f" {f.arrival_time.strftime('%H:%M')}" if f.arrival_time else ""),
-                    f.airline or "-",
-                    f.booking_reference or "-",
-                ])
-            elements.append(self._build_table(data))
-
-        if accommodations:
-            elements.append(Paragraph("Accommodations", self.styles["SectionHeader"]))
-            data = [["Name", "Type", "Check-in", "Check-out", "Ref"]]
-            for a in sorted(accommodations, key=lambda x: x.check_in_date):
-                data.append([
-                    a.name,
-                    a.type.capitalize(),
-                    a.check_in_date.strftime("%b %d, %Y"),
-                    a.check_out_date.strftime("%b %d, %Y"),
-                    a.booking_reference or "-",
-                ])
-            elements.append(self._build_table(data))
-
-        if activities:
-            elements.append(Paragraph("Activities", self.styles["SectionHeader"]))
-            data = [["Date", "Time", "Title", "Category", "Location"]]
-            for act in activities:
-                data.append([
-                    act.activity_date.strftime("%b %d, %Y"),
-                    act.start_time.strftime("%H:%M") if act.start_time else "-",
-                    act.title,
-                    act.category.capitalize(),
-                    act.location or "-",
-                ])
-            elements.append(self._build_table(data))
+        self._add_section(
+            elements, "Flights",
+            ["Route", "Departure", "Arrival", "Airline", "Ref"],
+            [self._format_flight_row(f) for f in sorted(flights, key=lambda x: x.departure_date)],
+        )
+        self._add_section(
+            elements, "Accommodations",
+            ["Name", "Type", "Check-in", "Check-out", "Ref"],
+            [self._format_accommodation_itinerary_row(a) for a in sorted(accommodations, key=lambda x: x.check_in_date)],
+        )
+        self._add_section(
+            elements, "Activities",
+            ["Date", "Time", "Title", "Category", "Location"],
+            [self._format_activity_itinerary_row(act) for act in activities],
+        )
 
         if not flights and not accommodations and not activities:
             elements.append(Paragraph("No itinerary items yet.", self.styles["Normal"]))
@@ -130,6 +153,76 @@ class PdfService:
         return buffer
 
     # ── Expenses PDF ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _format_expense_row(e, my_amount: Decimal, currency: str, members: dict) -> list:
+        paid_by_name = members.get(e.paid_by, "-") if e.paid_by else "-"
+        return [
+            e.expense_date.strftime(DATE_FORMAT),
+            e.title,
+            e.category.capitalize(),
+            paid_by_name,
+            f"{float(my_amount):,.2f} {currency}",
+            "Yes" if e.is_private else "No",
+        ]
+
+    @staticmethod
+    def _format_flight_share_row(f: Flight, my_amount: Decimal, currency: str) -> list:
+        return [
+            f.departure_date.strftime(DATE_FORMAT),
+            f"{f.departure_airport} → {f.arrival_airport}",
+            f.airline or "-",
+            f"{float(my_amount):,.2f} {currency}",
+            "Yes" if f.is_private else "No",
+        ]
+
+    @staticmethod
+    def _format_accommodation_share_row(acc: Accommodation, my_amount: Decimal, currency: str) -> list:
+        return [
+            acc.check_in_date.strftime(DATE_FORMAT),
+            acc.name,
+            acc.type.capitalize(),
+            f"{float(my_amount):,.2f} {currency}",
+            "Yes" if acc.is_private else "No",
+        ]
+
+    @staticmethod
+    def _format_activity_share_row(act: Activity, my_amount: Decimal, currency: str) -> list:
+        return [
+            act.activity_date.strftime(DATE_FORMAT),
+            act.title,
+            act.category.capitalize(),
+            f"{float(my_amount):,.2f} {currency}",
+            "Yes" if act.is_private else "No",
+        ]
+
+    async def _build_summary_elements(self, trip: Trip, all_items: list) -> List[Flowable]:
+        totals: dict = {}
+        for _, my_amount, currency in all_items:
+            totals[currency] = totals.get(currency, 0) + float(my_amount)
+
+        if not totals:
+            return []
+
+        summary_elements: List[Flowable] = [Paragraph("Summary", self.styles["SectionHeader"])]
+        summary_text = " + ".join(f"{amt:,.2f} {cur}" for cur, amt in totals.items())
+        summary_elements.append(Paragraph(f"Total (your share): {summary_text}", self.styles["Normal"]))
+        summary_elements.append(Spacer(1, 0.1 * inch))
+
+        base_currency = trip.currency or "USD"
+        rates = await get_exchange_rates(base_currency)
+        converted_total = sum(
+            convert_currency(Decimal(str(amt)), cur, base_currency, rates)
+            for cur, amt in totals.items()
+        )
+        today_str = datetime.now().strftime("%B %d, %Y")
+        summary_elements.append(Paragraph(
+            f"Converted total: {float(converted_total):,.2f} {base_currency} "
+            f"(exchange rates as of {today_str})",
+            self.styles["Normal"]
+        ))
+        summary_elements.append(Spacer(1, 0.15 * inch))
+        return summary_elements
 
     async def generate_expenses_pdf(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> BytesIO:
         trip = self._get_trip(trip_id)
@@ -149,99 +242,31 @@ class PdfService:
         doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.6*inch, bottomMargin=0.6*inch)
         elements = self._header(trip)
 
-        totals: dict = {}
-        for _, my_amount, currency in expense_items:
-            totals[currency] = totals.get(currency, 0) + float(my_amount)
-        for _, my_amount, currency in flight_items:
-            totals[currency] = totals.get(currency, 0) + float(my_amount)
-        for _, my_amount, currency in accommodation_items:
-            totals[currency] = totals.get(currency, 0) + float(my_amount)
-        for _, my_amount, currency in activity_items:
-            totals[currency] = totals.get(currency, 0) + float(my_amount)
+        all_items = expense_items + flight_items + accommodation_items + activity_items
+        elements.extend(await self._build_summary_elements(trip, all_items))
 
-        if totals:
-            elements.append(Paragraph("Summary", self.styles["SectionHeader"]))
-            summary_text = " + ".join(f"{amt:,.2f} {cur}" for cur, amt in totals.items())
-            elements.append(Paragraph(f"Total (your share): {summary_text}", self.styles["Normal"]))
-            elements.append(Spacer(1, 0.1 * inch))
+        self._add_section(
+            elements, "Manual Expenses (Your Share)",
+            ["Date", "Title", "Category", "Paid by", YOUR_SHARE, "Private"],
+            [self._format_expense_row(e, amt, cur, members) for e, amt, cur in expense_items],
+        )
+        self._add_section(
+            elements, "Flights (Your Share)",
+            ["Date", "Route", "Airline", YOUR_SHARE, "Private"],
+            [self._format_flight_share_row(f, amt, cur) for f, amt, cur in flight_items],
+        )
+        self._add_section(
+            elements, "Accommodations (Your Share)",
+            ["Check-in", "Name", "Type", YOUR_SHARE, "Private"],
+            [self._format_accommodation_share_row(acc, amt, cur) for acc, amt, cur in accommodation_items],
+        )
+        self._add_section(
+            elements, "Activities (Your Share)",
+            ["Date", "Title", "Category", YOUR_SHARE, "Private"],
+            [self._format_activity_share_row(act, amt, cur) for act, amt, cur in activity_items],
+        )
 
-            base_currency = trip.currency or "USD"
-            rates = await get_exchange_rates(base_currency)
-            converted_total = sum(
-                convert_currency(Decimal(str(amt)), cur, base_currency, rates)
-                for cur, amt in totals.items()
-            )
-            today_str = datetime.now().strftime("%B %d, %Y")
-            elements.append(Paragraph(
-                f"Converted total: {float(converted_total):,.2f} {base_currency} "
-                f"(exchange rates as of {today_str})",
-                self.styles["Normal"]
-            ))
-            elements.append(Spacer(1, 0.15 * inch))
-
-        # Manual Expenses
-        if expense_items:
-            elements.append(Paragraph("Manual Expenses (Your Share)", self.styles["SectionHeader"]))
-            data = [["Date", "Title", "Category", "Paid by", "Your Share", "Private"]]
-            for e, my_amount, currency in expense_items:
-                paid_by_name = members.get(e.paid_by, "-") if e.paid_by else "-"
-                data.append([
-                    e.expense_date.strftime("%b %d, %Y"),
-                    e.title,
-                    e.category.capitalize(),
-                    paid_by_name,
-                    f"{float(my_amount):,.2f} {currency}",
-                    "Yes" if e.is_private else "No",
-                ])
-            elements.append(self._build_table(data))
-            elements.append(Spacer(1, 0.15 * inch))
-
-        # Flights
-        if flight_items:
-            elements.append(Paragraph("Flights (Your Share)", self.styles["SectionHeader"]))
-            data = [["Date", "Route", "Airline", "Your Share", "Private"]]
-            for f, my_amount, currency in flight_items:
-                data.append([
-                    f.departure_date.strftime("%b %d, %Y"),
-                    f"{f.departure_airport} → {f.arrival_airport}",
-                    f.airline or "-",
-                    f"{float(my_amount):,.2f} {currency}",
-                    "Yes" if f.is_private else "No",
-                ])
-            elements.append(self._build_table(data))
-            elements.append(Spacer(1, 0.15 * inch))
-
-        # Accommodations
-        if accommodation_items:
-            elements.append(Paragraph("Accommodations (Your Share)", self.styles["SectionHeader"]))
-            data = [["Check-in", "Name", "Type", "Your Share", "Private"]]
-            for acc, my_amount, currency in accommodation_items:
-                data.append([
-                    acc.check_in_date.strftime("%b %d, %Y"),
-                    acc.name,
-                    acc.type.capitalize(),
-                    f"{float(my_amount):,.2f} {currency}",
-                    "Yes" if acc.is_private else "No",
-                ])
-            elements.append(self._build_table(data))
-            elements.append(Spacer(1, 0.15 * inch))
-
-        # Activities
-        if activity_items:
-            elements.append(Paragraph("Activities (Your Share)", self.styles["SectionHeader"]))
-            data = [["Date", "Title", "Category", "Your Share", "Private"]]
-            for act, my_amount, currency in activity_items:
-                data.append([
-                    act.activity_date.strftime("%b %d, %Y"),
-                    act.title,
-                    act.category.capitalize(),
-                    f"{float(my_amount):,.2f} {currency}",
-                    "Yes" if act.is_private else "No",
-                ])
-            elements.append(self._build_table(data))
-            elements.append(Spacer(1, 0.15 * inch))
-
-        if not expense_items and not flight_items and not accommodation_items and not activity_items:
+        if not all_items:
             elements.append(Paragraph("No expenses visible to you yet.", self.styles["Normal"]))
 
         elements.append(Spacer(1, 0.1 * inch))

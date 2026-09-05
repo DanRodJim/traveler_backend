@@ -20,7 +20,7 @@ from app.core.exceptions import (
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 
 
-@router.get("/", response_model=List[ExpenseResponse])
+@router.get("/")
 async def get_expenses(
     trip_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -52,7 +52,7 @@ async def get_total_expenses(
     return {"trip_id": str(trip_id), "total": float(total)}
 
 
-@router.get("/{expense_id}", response_model=ExpenseResponse)
+@router.get("/{expense_id}")
 async def get_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -71,7 +71,7 @@ async def get_expense(
     return ExpenseResponse.model_validate(expense)
 
 
-@router.post("/", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_expense(
     expense_data: ExpenseCreate,
     current_user: User = Depends(get_current_active_user),
@@ -87,7 +87,7 @@ async def create_expense(
     return ExpenseResponse.model_validate(expense)
 
 
-@router.put("/{expense_id}", response_model=ExpenseResponse)
+@router.put("/{expense_id}")
 async def update_expense(
     expense_id: uuid.UUID,
     expense_data: ExpenseUpdate,
@@ -129,10 +129,8 @@ async def delete_expense(
     
     service.delete(expense_id)
 
-@router.patch(
-    "/{expense_id}/splits/{split_id}/pay",
-    response_model=ExpenseSplitResponse
-)
+
+@router.patch("/{expense_id}/splits/{split_id}/pay")
 async def mark_split_paid(
     expense_id: uuid.UUID,
     split_id: uuid.UUID,
@@ -144,10 +142,7 @@ async def mark_split_paid(
     return ExpenseSplitResponse.model_validate(split)
 
 
-@router.patch(
-    "/{expense_id}/splits/{split_id}/unpay",
-    response_model=ExpenseSplitResponse
-)
+@router.patch("/{expense_id}/splits/{split_id}/unpay")
 async def unmark_split_paid(
     expense_id: uuid.UUID,
     split_id: uuid.UUID,

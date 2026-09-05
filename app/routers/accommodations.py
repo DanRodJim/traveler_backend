@@ -20,7 +20,7 @@ from app.core.exceptions import (
 router = APIRouter(prefix="/api/accommodations", tags=["accommodations"])
 
 
-@router.get("/", response_model=List[AccommodationResponse])
+@router.get("/")
 async def get_accommodations(
     trip_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -39,7 +39,7 @@ async def get_accommodations(
     ]
 
 
-@router.get("/{accommodation_id}", response_model=AccommodationResponse)
+@router.get("/{accommodation_id}")
 async def get_accommodation(
     accommodation_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -58,7 +58,7 @@ async def get_accommodation(
     return AccommodationResponse.model_validate(accommodation)
 
 
-@router.post("/", response_model=AccommodationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_accommodation(
     accommodation_data: AccommodationCreate,
     current_user: User = Depends(get_current_active_user),
@@ -69,12 +69,12 @@ async def create_accommodation(
         raise InsufficientPermissionsError("editor")
 
     service = AccommodationService(db)
-    accommodation: Accommodation = service.create(accommodation_data, current_user.id)
+    accommodation: Accommodation = await service.create(accommodation_data, current_user.id)
 
     return AccommodationResponse.model_validate(accommodation)
 
 
-@router.put("/{accommodation_id}", response_model=AccommodationResponse)
+@router.put("/{accommodation_id}")
 async def update_accommodation(
     accommodation_id: uuid.UUID,
     accommodation_data: AccommodationUpdate,
@@ -91,7 +91,7 @@ async def update_accommodation(
     if not trip_service.has_edit_permission(accommodation.trip_id, current_user.id):
         raise InsufficientPermissionsError("editor")
 
-    updated: Accommodation | None = service.update_with_splits(accommodation_id, accommodation_data)
+    updated: Accommodation | None = await service.update_with_splits(accommodation_id, accommodation_data)
     if not updated:
         raise AccommodationNotFoundError()
 
@@ -117,7 +117,7 @@ async def delete_accommodation(
     service.delete(accommodation_id)
 
 
-@router.patch("/{accommodation_id}/splits/{split_id}/pay", response_model=AccommodationSplitResponse)
+@router.patch("/{accommodation_id}/splits/{split_id}/pay")
 async def mark_accommodation_split_paid(
     accommodation_id: uuid.UUID,
     split_id: uuid.UUID,
@@ -129,7 +129,7 @@ async def mark_accommodation_split_paid(
     return AccommodationSplitResponse.model_validate(split)
 
 
-@router.patch("/{accommodation_id}/splits/{split_id}/unpay", response_model=AccommodationSplitResponse)
+@router.patch("/{accommodation_id}/splits/{split_id}/unpay")
 async def unmark_accommodation_split_paid(
     accommodation_id: uuid.UUID,
     split_id: uuid.UUID,

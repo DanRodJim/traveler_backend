@@ -8,7 +8,7 @@ from typing import Generator
 import uuid
 from datetime import date, time, timedelta
 from dotenv import load_dotenv
-import logging  # ✅ Agregar
+import logging
 
 # Desactivar logs durante tests
 logging.disable(logging.CRITICAL)

@@ -18,7 +18,7 @@ from app.common.trip_utils import verify_trip_membership
 router = APIRouter(prefix="/api/checklists", tags=["checklists"])
 
 
-@router.get("/trip/{trip_id}", response_model=List[ChecklistItemResponse])
+@router.get("/trip/{trip_id}")
 async def get_checklist_items(
     trip_id: uuid.UUID,
     list_type: Optional[str] = None,
@@ -33,7 +33,6 @@ async def get_checklist_items(
 
 @router.post(
     "/trip/{trip_id}",
-    response_model=ChecklistItemResponse,
     status_code=status.HTTP_201_CREATED
 )
 async def create_checklist_item(
@@ -48,7 +47,7 @@ async def create_checklist_item(
     return ChecklistItemResponse.model_validate(item)
 
 
-@router.put("/{item_id}", response_model=ChecklistItemResponse)
+@router.put("/{item_id}")
 async def update_checklist_item(
     item_id: uuid.UUID,
     item_data: ChecklistItemUpdate,
@@ -60,7 +59,7 @@ async def update_checklist_item(
     return ChecklistItemResponse.model_validate(item)
 
 
-@router.patch("/{item_id}/toggle", response_model=ChecklistItemResponse)
+@router.patch("/{item_id}/toggle")
 async def toggle_checklist_item(
     item_id: uuid.UUID,
     toggle_data: ChecklistItemToggle,

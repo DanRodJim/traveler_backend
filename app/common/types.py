@@ -35,3 +35,22 @@ class MemberRole(str, Enum):
     OWNER = "owner"
     EDITOR = "editor"
     VIEWER = "viewer"
+
+
+class NotificationPreference(str, Enum):
+    NONE = "none"
+    INVITATIONS_ONLY = "invitations_only"
+    ALERTS_ONLY = "alerts_only"
+    ALL = "all"
+
+
+class NotificationType(str, Enum):
+    INVITATION = "invitation"
+    TRIP_REMINDER = "trip_reminder"
+
+
+class InvitationStatus(str, Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    EXPIRED = "expired"

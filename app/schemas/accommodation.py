@@ -9,9 +9,8 @@ from app.core.exceptions import InvalidDateRangeError
 
 
 def validate_date_range(start: Optional[date], end: Optional[date]) -> None:
-    if start is not None and end is not None:
-        if end <= start:
-            raise InvalidDateRangeError("dates")
+    if (start is not None and end is not None) and (end <= start):
+        raise InvalidDateRangeError("dates")
 
 
 # ── AccommodationSplit schemas ──────────────────────────────────────────────
@@ -46,6 +45,8 @@ class AccommodationBase(BaseModel):
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     currency: Optional[str] = Field(default="USD", pattern=r'^[A-Z]{3}$')
     notes: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     paid_by: Optional[uuid.UUID] = None
     is_private: bool = True
 
@@ -78,6 +79,8 @@ class AccommodationUpdate(BaseModel):
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     currency: Optional[str] = Field(None, pattern=r'^[A-Z]{3}$')
     notes: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     paid_by: Optional[uuid.UUID] = None
     is_private: Optional[bool] = None
     splits: Optional[List[AccommodationSplitCreate]] = None

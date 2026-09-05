@@ -38,55 +38,21 @@ class DashboardService:
         
         return status_counts
     
-    def get_total_expenses_by_currency(self, trip_ids: List[uuid.UUID]) -> Dict[str, float]:
-        total_expenses_dict = {}
-        
-        expenses_by_currency = self.db.query(
-            Expense.currency,
-            func.sum(Expense.amount)
-        ).filter(
-            Expense.trip_id.in_(trip_ids)
-        ).group_by(Expense.currency).all()
-        
-        for currency, total in expenses_by_currency:
-            total_expenses_dict[currency] = total_expenses_dict.get(currency, 0) + float(total)
-        
-        activities_by_currency = self.db.query(
-            Activity.currency,
-            func.sum(Activity.cost)
-        ).filter(
-            Activity.trip_id.in_(trip_ids),
-            Activity.cost.isnot(None)
-        ).group_by(Activity.currency).all()
-        
-        for currency, total in activities_by_currency:
-            if currency:
-                total_expenses_dict[currency] = total_expenses_dict.get(currency, 0) + float(total)
-        
-        flights_by_currency = self.db.query(
-            Flight.currency,
-            func.sum(Flight.cost)
-        ).filter(
-            Flight.trip_id.in_(trip_ids),
-            Flight.cost.isnot(None)
-        ).group_by(Flight.currency).all()
-        
-        for currency, total in flights_by_currency:
-            if currency:
-                total_expenses_dict[currency] = total_expenses_dict.get(currency, 0) + float(total)
-        
-        accommodations_by_currency = self.db.query(
-            Accommodation.currency,
-            func.sum(Accommodation.cost)
-        ).filter(
-            Accommodation.trip_id.in_(trip_ids),
-            Accommodation.cost.isnot(None)
-        ).group_by(Accommodation.currency).all()
-        
-        for currency, total in accommodations_by_currency:
-            if currency:
-                total_expenses_dict[currency] = total_expenses_dict.get(currency, 0) + float(total)
-        
+    def get_total_expenses_by_currency(
+        self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID
+    ) -> Dict[str, float]:
+        personal_budget_service = PersonalBudgetService(self.db)
+        total_expenses_dict: Dict[str, float] = {}
+
+        for trip_id in trip_ids:
+            expense_items = personal_budget_service.get_my_expense_line_items(trip_id, current_user_id)
+            flight_items = personal_budget_service.get_my_flight_line_items(trip_id, current_user_id)
+            accommodation_items = personal_budget_service.get_my_accommodation_line_items(trip_id, current_user_id)
+            activity_items = personal_budget_service.get_my_activity_line_items(trip_id, current_user_id)
+
+            for _, amount, currency in expense_items + flight_items + accommodation_items + activity_items:
+                total_expenses_dict[currency] = total_expenses_dict.get(currency, 0) + float(amount)
+
         return total_expenses_dict
     
     def get_expenses_by_category(self, trip_ids: List[uuid.UUID]) -> Dict[str, float]:
@@ -145,14 +111,18 @@ class DashboardService:
         
         return expense_type_totals
     
-    async def get_top_trips_by_spending(self, trip_ids: list, limit: int = 5) -> list:
+    async def get_top_trips_by_spending(
+        self, trip_ids: list, current_user_id: uuid.UUID, limit: int = 5
+    ) -> list:
         trips = self.db.query(Trip).filter(Trip.id.in_(trip_ids)).all()
 
-        budget_service = BudgetService(self.db)
+        personal_budget_service = PersonalBudgetService(self.db)
         results = []
 
         for trip in trips:
-            spending = await budget_service.calculate_trip_spending(trip.id)
+            spending = await personal_budget_service.calculate_personal_spending(
+                trip.id, current_user_id
+            )
             if spending["total_spent"] > 0:
                 results.append({
                     "trip": trip.title,
@@ -213,9 +183,7 @@ class DashboardService:
             Activity.trip_id.in_(trip_ids)
         ).group_by(Activity.category).all()
         
-        return {
-            category: count for category, count in activities_by_category
-        }
+        return {str(category): count for category, count in activities_by_category}
     
     def get_accommodations_by_type(self, trip_ids: List[uuid.UUID]) -> Dict[str, int]:
         accommodations_by_type = self.db.query(
@@ -225,9 +193,7 @@ class DashboardService:
             Accommodation.trip_id.in_(trip_ids)
         ).group_by(Accommodation.type).all()
         
-        return {
-            acc_type: count for acc_type, count in accommodations_by_type
-        }
+        return {str(acc_type): count for acc_type, count in accommodations_by_type}
 
     def get_pending_splits_owed_by_me(
         self,

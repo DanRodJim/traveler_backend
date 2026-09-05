@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     GROQ_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
+
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "onboarding@resend.dev"  # Cambiar cuando tengas dominio propio verificado
     
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE),

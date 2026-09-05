@@ -94,6 +94,11 @@ class ChecklistNotFoundError(ResourceNotFoundError):
     def __init__(self):
         super().__init__("Checklist item")
 
+
+class EstimationNotFoundError(ResourceNotFoundError):
+    def __init__(self):
+        super().__init__("Estimation")
+
 # --- Authorization errors ---
 
 class UnauthorizedError(AppException):

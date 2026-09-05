@@ -8,7 +8,9 @@ from app.models.trip_member import TripMember
 from app.schemas.trip import (
     TripCreate, TripUpdate, TripResponse
 )
-from app.schemas.trip_member import TripMemberCreate, TripMemberResponse, TripMemberUpdate,TripMemberBudgetUpdate
+from app.schemas.trip_invitation import TripInvitationCreate, TripInvitationResponse
+from app.schemas.trip_member import TripMemberResponse, TripMemberUpdate,TripMemberBudgetUpdate
+from app.services.invitation_service import InvitationService
 from app.services.trip_service import TripService
 from app.auth.dependencies import get_current_active_user
 from app.models import Trip, User
@@ -21,7 +23,7 @@ from app.common.trip_utils import verify_trip_membership
 
 router = APIRouter(prefix="/api/trips", tags=["trips"])
 
-@router.get("/", response_model=List[TripResponse])
+@router.get("/")
 async def get_all_trips(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -31,7 +33,7 @@ async def get_all_trips(
     return [TripResponse.model_validate(trip) for trip in trips]
 
 
-@router.get("/{trip_id}", response_model=TripResponse)
+@router.get("/{trip_id}")
 async def get_trip(
     trip_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -49,7 +51,7 @@ async def get_trip(
     return TripResponse.model_validate(trip)
 
 
-@router.post("/", response_model=TripResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_trip(
     trip_data: TripCreate,
     current_user: User = Depends(get_current_active_user),
@@ -60,7 +62,7 @@ async def create_trip(
     return TripResponse.model_validate(trip)
 
 
-@router.put("/{trip_id}", response_model=TripResponse)
+@router.put("/{trip_id}")
 async def update_trip(
     trip_id: uuid.UUID,
     trip_data: TripUpdate,
@@ -96,7 +98,7 @@ async def delete_trip(
 
 # --- Trip Members ---
 
-@router.get("/{trip_id}/members", response_model=List[TripMemberResponse])
+@router.get("/{trip_id}/members")
 async def get_trip_members(
     trip_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -111,20 +113,44 @@ async def get_trip_members(
     return [TripMemberResponse.model_validate(member) for member in members]
 
 
-@router.post("/{trip_id}/members", response_model=TripMemberResponse, status_code=status.HTTP_201_CREATED)
-async def add_trip_member(
+@router.post(
+    "/{trip_id}/invitations",
+    status_code=status.HTTP_201_CREATED
+)
+async def invite_member(
     trip_id: uuid.UUID,
-    member_data: TripMemberCreate,
+    invitation_data: TripInvitationCreate,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-) -> TripMemberResponse:
-    service = TripService(db)
-    
-    member: TripMember = service.add_member(trip_id, member_data, current_user.id)
-    return TripMemberResponse.model_validate(member)
+) -> TripInvitationResponse:
+    service = InvitationService(db)
+    invitation = service.create_invitation(trip_id, invitation_data, current_user.id)
+    return TripInvitationResponse.model_validate(invitation)
 
 
-@router.put("/{trip_id}/members/{user_id}", response_model=TripMemberResponse)
+@router.get("/{trip_id}/invitations")
+async def get_trip_invitations(
+    trip_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> List[TripInvitationResponse]:
+    service = InvitationService(db)
+    invitations = service.get_pending_by_trip(trip_id, current_user.id)
+    return [TripInvitationResponse.model_validate(inv) for inv in invitations]
+
+
+@router.delete("/{trip_id}/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_invitation(
+    trip_id: uuid.UUID,
+    invitation_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> None:
+    service = InvitationService(db)
+    service.revoke_invitation(trip_id, invitation_id, current_user.id)
+
+
+@router.put("/{trip_id}/members/{user_id}")
 async def update_trip_member_role(
     trip_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -155,7 +181,7 @@ async def remove_or_leave_trip_member(
     service.remove_member(trip_id, user_id, current_user.id)
 
 
-@router.put("/{trip_id}/members/me/budget", response_model=TripMemberResponse)
+@router.put("/{trip_id}/members/me/budget")
 async def update_my_personal_budget(
     trip_id: uuid.UUID,
     budget_data: TripMemberBudgetUpdate,

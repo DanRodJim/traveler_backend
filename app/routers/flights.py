@@ -18,7 +18,7 @@ from app.core.exceptions import (
 router = APIRouter(prefix="/api/flights", tags=["flights"])
 
 
-@router.get("/", response_model=List[FlightResponse])
+@router.get("/")
 async def get_flights(
     trip_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -34,7 +34,7 @@ async def get_flights(
     return [FlightResponse.model_validate(flight) for flight in flights]
 
 
-@router.get("/{flight_id}", response_model=FlightResponse)
+@router.get("/{flight_id}")
 async def get_flight(
     flight_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -53,7 +53,7 @@ async def get_flight(
     return FlightResponse.model_validate(flight)
 
 
-@router.post("/", response_model=FlightResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_flight(
     flight_data: FlightCreate,
     current_user: User = Depends(get_current_active_user),
@@ -69,7 +69,7 @@ async def create_flight(
     return FlightResponse.model_validate(flight)
 
 
-@router.put("/{flight_id}", response_model=FlightResponse)
+@router.put("/{flight_id}")
 async def update_flight(
     flight_id: uuid.UUID,
     flight_data: FlightUpdate,
@@ -112,7 +112,7 @@ async def delete_flight(
     service.delete(flight_id)
 
 
-@router.patch("/{flight_id}/splits/{split_id}/pay", response_model=FlightSplitResponse)
+@router.patch("/{flight_id}/splits/{split_id}/pay")
 async def mark_flight_split_paid(
     flight_id: uuid.UUID,
     split_id: uuid.UUID,
@@ -124,7 +124,7 @@ async def mark_flight_split_paid(
     return FlightSplitResponse.model_validate(split)
 
 
-@router.patch("/{flight_id}/splits/{split_id}/unpay", response_model=FlightSplitResponse)
+@router.patch("/{flight_id}/splits/{split_id}/unpay")
 async def unmark_flight_split_paid(
     flight_id: uuid.UUID,
     split_id: uuid.UUID,

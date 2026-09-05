@@ -9,9 +9,8 @@ from app.core.exceptions import InvalidTimeRangeError
 
 
 def validate_time_range(start: Optional[time], end: Optional[time]) -> None:
-    if start is not None and end is not None:
-        if end <= start:
-            raise InvalidTimeRangeError("times")
+    if (start is not None and end is not None) and (end <= start):
+        raise InvalidTimeRangeError("times")
 
 
 # ── ActivitySplit schemas ────────────────────────────────────────────────────
@@ -48,6 +47,8 @@ class ActivityBase(BaseModel):
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     currency: Optional[str] = Field(default="USD", pattern=r'^[A-Z]{3}$')
     notes: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     paid_by: Optional[uuid.UUID] = None
     is_private: bool = True
 
@@ -82,6 +83,8 @@ class ActivityUpdate(BaseModel):
     cost: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
     currency: Optional[str] = Field(None, pattern=r'^[A-Z]{3}$')
     notes: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     paid_by: Optional[uuid.UUID] = None
     is_private: Optional[bool] = None
     splits: Optional[List[ActivitySplitCreate]] = None

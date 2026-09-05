@@ -37,9 +37,9 @@ async def get_dashboard_stats(
     return {
         "total_trips": len(trip_ids),
         "trips_by_status": service.get_trips_by_status(trip_ids),
-        "total_expenses": service.get_total_expenses_by_currency(trip_ids),
+        "total_expenses": service.get_total_expenses_by_currency(trip_ids, current_user.id),
         "expenses_by_category": service.get_expenses_by_category(trip_ids),
-        "expenses_by_trip": await service.get_top_trips_by_spending(trip_ids),  # ✅ await
+        "expenses_by_trip": await service.get_top_trips_by_spending(trip_ids, current_user.id),
         "upcoming_activities": service.get_upcoming_activities(trip_ids),
         "next_trip": service.get_next_trip(trip_ids),
         "expenses_by_type": service.get_expenses_by_type(trip_ids),
@@ -60,7 +60,7 @@ async def get_dashboard_alerts(
             "pending_splits_owed_by_me": [],
             "pending_splits_owed_to_me": [],
             "budget_alerts": [],
-            "personal_budget_alerts": [],  # ✅
+            "personal_budget_alerts": [],
         }
 
     return {
@@ -71,7 +71,7 @@ async def get_dashboard_alerts(
             current_user.id, trip_ids
         ),
         "budget_alerts": await service.get_budget_alerts(trip_ids),
-        "personal_budget_alerts": await service.get_personal_budget_alerts(  # ✅
+        "personal_budget_alerts": await service.get_personal_budget_alerts(
             current_user.id, trip_ids
         ),
     }

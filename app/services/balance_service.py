@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from typing import Dict, List
+from typing import Dict, List, Optional
 from decimal import Decimal
 from datetime import datetime, timezone
 import uuid
@@ -105,12 +105,78 @@ class BalanceService:
         )
         return list({a.id: a for a in public_activities + private_activities}.values())
 
-    def calculate_trip_balances(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> Dict:
+    def _ensure_currency(
+        self,
+        currency: str,
+        members: List[TripMember],
+        balances_by_currency: Dict[str, Dict[str, Decimal]],
+        paid_by_currency: Dict[str, Dict[str, Decimal]],
+        owes_by_currency: Dict[str, Dict[str, Decimal]],
+    ) -> None:
+        if currency not in balances_by_currency:
+            balances_by_currency[currency] = {str(m.user_id): Decimal('0') for m in members}
+            paid_by_currency[currency] = {str(m.user_id): Decimal('0') for m in members}
+            owes_by_currency[currency] = {str(m.user_id): Decimal('0') for m in members}
+
+    def _apply_pending_splits(
+        self,
+        currency: str,
+        payer_id: Optional[uuid.UUID],
+        pending_splits: list,
+        members: List[TripMember],
+        balances_by_currency: Dict[str, Dict[str, Decimal]],
+        paid_by_currency: Dict[str, Dict[str, Decimal]],
+        owes_by_currency: Dict[str, Dict[str, Decimal]],
+    ) -> None:
+        self._ensure_currency(currency, members, balances_by_currency, paid_by_currency, owes_by_currency)
+        if not pending_splits:
+            return
+
+        pending_total = sum(Decimal(str(s.amount)) for s in pending_splits)
+
+        if payer_id:
+            payer_str = str(payer_id)
+            if payer_str in paid_by_currency[currency]:
+                paid_by_currency[currency][payer_str] += pending_total
+                balances_by_currency[currency][payer_str] += pending_total
+
+        for split in pending_splits:
+            user_id = str(split.user_id)
+            split_amount = Decimal(str(split.amount))
+            if user_id not in owes_by_currency[currency]:
+                continue
+            owes_by_currency[currency][user_id] += split_amount
+            balances_by_currency[currency][user_id] -= split_amount
+
+    def _collect_pending_items(
+        self, trip_id: uuid.UUID, current_user_id: uuid.UUID
+    ) -> list[tuple[str, Optional[uuid.UUID], list]]:
         expenses = self._get_visible_expenses(trip_id, current_user_id)
         flights = self._get_visible_flights(trip_id, current_user_id)
         accommodations = self._get_visible_accommodations(trip_id, current_user_id)
         activities = self._get_visible_activities(trip_id, current_user_id)
 
+        items: list[tuple[str, Optional[uuid.UUID], list]] = []
+
+        for expense in expenses:
+            pending = [s for s in (expense.splits or []) if not s.is_paid]
+            items.append((expense.currency, expense.paid_by, pending))
+
+        for flight in flights:
+            pending = [s for s in (flight.splits or []) if not s.is_paid]
+            items.append((flight.currency or "USD", flight.paid_by or flight.created_by, pending))
+
+        for acc in accommodations:
+            pending = [s for s in (acc.splits or []) if not s.is_paid]
+            items.append((acc.currency or "USD", acc.paid_by or acc.created_by, pending))
+
+        for act in activities:
+            pending = [s for s in (act.splits or []) if not s.is_paid]
+            items.append((act.currency or "USD", act.paid_by or act.created_by, pending))
+
+        return items
+
+    def calculate_trip_balances(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> Dict:
         members = self.db.query(TripMember).join(User).filter(
             TripMember.trip_id == trip_id
         ).all()
@@ -128,65 +194,17 @@ class BalanceService:
         paid_by_currency: Dict[str, Dict[str, Decimal]] = {}
         owes_by_currency: Dict[str, Dict[str, Decimal]] = {}
 
-        def _ensure_currency(currency: str):
-            if currency not in balances_by_currency:
-                balances_by_currency[currency] = {str(m.user_id): Decimal('0') for m in members}
-                paid_by_currency[currency] = {str(m.user_id): Decimal('0') for m in members}
-                owes_by_currency[currency] = {str(m.user_id): Decimal('0') for m in members}
-
-        def _apply_pending_splits(currency: str, payer_id, pending_splits):
-            _ensure_currency(currency)
-            if not pending_splits:
-                return
-
-            pending_total = sum(Decimal(str(s.amount)) for s in pending_splits)
-
-            if payer_id:
-                payer_str = str(payer_id)
-                if payer_str in paid_by_currency[currency]:
-                    paid_by_currency[currency][payer_str] += pending_total
-                    balances_by_currency[currency][payer_str] += pending_total
-
-            for split in pending_splits:
-                user_id = str(split.user_id)
-                split_amount = Decimal(str(split.amount))
-                if user_id not in owes_by_currency[currency]:
-                    continue
-                owes_by_currency[currency][user_id] += split_amount
-                balances_by_currency[currency][user_id] -= split_amount
-
-        # Expenses
-        for expense in expenses:
-            pending_splits = [s for s in (expense.splits or []) if not s.is_paid]
-            _apply_pending_splits(expense.currency, expense.paid_by, pending_splits)
-
-        # Flights
-        for flight in flights:
-            currency = flight.currency or "USD"
-            payer_id = flight.paid_by or flight.created_by
-            pending_splits = [s for s in (flight.splits or []) if not s.is_paid]
-            _apply_pending_splits(currency, payer_id, pending_splits)
-
-        # Accommodations
-        for acc in accommodations:
-            currency = acc.currency or "USD"
-            payer_id = acc.paid_by or acc.created_by
-            pending_splits = [s for s in (acc.splits or []) if not s.is_paid]
-            _apply_pending_splits(currency, payer_id, pending_splits)
-
-        # Activities
-        for act in activities:
-            currency = act.currency or "USD"
-            payer_id = act.paid_by or act.created_by
-            pending_splits = [s for s in (act.splits or []) if not s.is_paid]
-            _apply_pending_splits(currency, payer_id, pending_splits)
-
-        settlements_by_currency = {}
-        for currency in balances_by_currency:
-            settlements_by_currency[currency] = self._calculate_settlements(
-                balances_by_currency[currency],
-                member_map
+        pending_items = self._collect_pending_items(trip_id, current_user_id)
+        for currency, payer_id, pending_splits in pending_items:
+            self._apply_pending_splits(
+                currency, payer_id, pending_splits,
+                members, balances_by_currency, paid_by_currency, owes_by_currency,
             )
+
+        settlements_by_currency = {
+            currency: self._calculate_settlements(balances_by_currency[currency], member_map)
+            for currency in balances_by_currency
+        }
 
         return {
             'members': list(member_map.values()),
@@ -293,7 +311,6 @@ class BalanceService:
         now = datetime.now(timezone.utc)
         settled_count = 0
 
-        # Expense splits
         expense_splits = (
             self.db.query(ExpenseSplit)
             .join(Expense, ExpenseSplit.expense_id == Expense.id)
@@ -312,7 +329,6 @@ class BalanceService:
             split.updated_at = now
             settled_count += 1
 
-        # ✅ Flight splits — considerar paid_by o created_by como pagador
         flight_splits = (
             self.db.query(FlightSplit)
             .join(Flight, FlightSplit.flight_id == Flight.id)
