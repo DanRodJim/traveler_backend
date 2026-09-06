@@ -6,10 +6,10 @@ import logging
 from contextlib import asynccontextmanager
 
 from app.routers import auth, calendar, dashboard, invitations, notifications, pdf, users, trips, activities, flights, accommodations, expenses, balances, budget, ai_estimator, checklists
-from app.database.db import engine, Base
 from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logging_config import setup_logging
+from app.core.scheduler import start_scheduler, shutdown_scheduler
 from app.middleware.error_handler import (
     app_exception_handler,
     integrity_error_handler,
@@ -26,24 +26,29 @@ logger = logging.getLogger(__name__)
 async def lifespan(_: FastAPI):
     # Startup
     logger.info(f"Tabibito: {settings.PROJECT_NAME} v{settings.VERSION} starting...")
-    
+
     # Base.metadata.create_all(bind=engine)
     logger.info("Database tables created/verified")
-    
+
     logger.info(f"Environment: {settings.ENV}")
-    
+
     if settings.is_development():
         logger.info("API Docs: http://localhost:8000/api/docs")
         logger.info("Development mode - Debug enabled")
+        from app.routers import dev_tools
+        app.include_router(dev_tools.router)
     elif settings.is_production():
         logger.info("Production mode - Optimized for performance")
-    
+
+    start_scheduler() # Incoming trip alerts
+
     logger.info(f"{settings.PROJECT_NAME} started successfully!")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Application shutting down...")
+    shutdown_scheduler()
     logger.info("Goodbye!")
 
 
