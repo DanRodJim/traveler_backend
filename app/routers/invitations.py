@@ -28,7 +28,7 @@ async def get_invitation_by_token(
     db: Session = Depends(get_db)
 ) -> MyInvitationResponse:
     service = InvitationService(db)
-    result = service.get_invitation_details_by_token(token)
+    result = service.get_invitation_details_by_token(token, current_user)
     if not result:
         raise InvitationNotFoundError()
     return result

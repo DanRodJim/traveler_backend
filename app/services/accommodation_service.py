@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -18,13 +19,45 @@ class AccommodationService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all_by_trip(self, trip_id: uuid.UUID) -> List[Accommodation]:
-        return self.db.query(Accommodation).filter(
-            Accommodation.trip_id == trip_id
-        ).order_by(Accommodation.check_in_date).all()
+    def _get_visible_accommodations_query(self, trip_id: uuid.UUID, current_user_id: uuid.UUID):
+        public = self.db.query(Accommodation).filter(
+            Accommodation.trip_id == trip_id, Accommodation.is_private == False
+        )
+        private = (
+            self.db.query(Accommodation)
+            .outerjoin(AccommodationSplit, AccommodationSplit.accommodation_id == Accommodation.id)
+            .filter(
+                Accommodation.trip_id == trip_id,
+                Accommodation.is_private == True,
+                or_(
+                    Accommodation.paid_by == current_user_id,
+                    Accommodation.created_by == current_user_id,
+                    AccommodationSplit.user_id == current_user_id,
+                ),
+            )
+        )
+        return public, private
 
-    def get_by_id(self, accommodation_id: uuid.UUID) -> Optional[Accommodation]:
+    def get_all_by_trip(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> List[Accommodation]:
+        public, private = self._get_visible_accommodations_query(trip_id, current_user_id)
+        return sorted({a.id: a for a in public.all() + private.distinct().all()}.values(), key=lambda a: a.check_in_date)
+
+    def _get_raw_by_id(self, accommodation_id: uuid.UUID) -> Optional[Accommodation]:
         return self.db.query(Accommodation).filter(Accommodation.id == accommodation_id).first()
+
+    def get_by_id(self, accommodation_id: uuid.UUID, current_user_id: uuid.UUID) -> Optional[Accommodation]:
+        acc = self._get_raw_by_id(accommodation_id)
+        if not acc:
+            return None
+        if not acc.is_private:
+            return acc
+
+        is_visible = (
+            acc.paid_by == current_user_id
+            or acc.created_by == current_user_id
+            or any(s.user_id == current_user_id for s in acc.splits)
+        )
+        return acc if is_visible else None
 
     async def create_with_splits(
         self, accommodation_data: AccommodationCreate, created_by: uuid.UUID
@@ -69,7 +102,7 @@ class AccommodationService:
     async def update_with_splits(
         self, accommodation_id: uuid.UUID, accommodation_data: AccommodationUpdate
     ) -> Optional[Accommodation]:
-        accommodation = self.get_by_id(accommodation_id)
+        accommodation = self._get_raw_by_id(accommodation_id)
         if not accommodation:
             return None
 
@@ -116,7 +149,7 @@ class AccommodationService:
         return await self.update_with_splits(accommodation_id, accommodation_data)
 
     def delete(self, accommodation_id: uuid.UUID) -> bool:
-        accommodation = self.get_by_id(accommodation_id)
+        accommodation = self._get_raw_by_id(accommodation_id)
         if not accommodation:
             return False
 
@@ -127,7 +160,7 @@ class AccommodationService:
     def mark_split_as_paid(
         self, accommodation_id: uuid.UUID, split_id: uuid.UUID, current_user_id: uuid.UUID
     ) -> AccommodationSplit:
-        accommodation = self.get_by_id(accommodation_id)
+        accommodation = self._get_raw_by_id(accommodation_id)
         if not accommodation:
             raise AccommodationNotFoundError()
 
@@ -153,7 +186,7 @@ class AccommodationService:
     def unmark_split_as_paid(
         self, accommodation_id: uuid.UUID, split_id: uuid.UUID, current_user_id: uuid.UUID
     ) -> AccommodationSplit:
-        accommodation = self.get_by_id(accommodation_id)
+        accommodation = self._get_raw_by_id(accommodation_id)
         if not accommodation:
             raise AccommodationNotFoundError()
 

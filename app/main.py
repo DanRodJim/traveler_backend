@@ -35,8 +35,6 @@ async def lifespan(_: FastAPI):
     if settings.is_development():
         logger.info("API Docs: http://localhost:8000/api/docs")
         logger.info("Development mode - Debug enabled")
-        from app.routers import dev_tools
-        app.include_router(dev_tools.router)
     elif settings.is_production():
         logger.info("Production mode - Optimized for performance")
 

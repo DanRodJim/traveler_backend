@@ -31,7 +31,7 @@ async def get_accommodations(
         raise UnauthorizedError("Not authorized to view this trip")
 
     service = AccommodationService(db)
-    accommodations: List[Accommodation] = service.get_all_by_trip(trip_id)
+    accommodations: List[Accommodation] = service.get_all_by_trip(trip_id, current_user.id)
 
     return [
         AccommodationResponse.model_validate(accommodation)
@@ -46,7 +46,7 @@ async def get_accommodation(
     db: Session = Depends(get_db)
 ) -> AccommodationResponse:
     service = AccommodationService(db)
-    accommodation: Accommodation | None = service.get_by_id(accommodation_id)
+    accommodation: Accommodation | None = service.get_by_id(accommodation_id, current_user.id)
 
     if not accommodation:
         raise AccommodationNotFoundError()
@@ -82,7 +82,7 @@ async def update_accommodation(
     db: Session = Depends(get_db)
 ) -> AccommodationResponse:
     service = AccommodationService(db)
-    accommodation: Accommodation | None = service.get_by_id(accommodation_id)
+    accommodation: Accommodation | None = service._get_raw_by_id(accommodation_id)
 
     if not accommodation:
         raise AccommodationNotFoundError()
@@ -105,7 +105,7 @@ async def delete_accommodation(
     db: Session = Depends(get_db)
 ) -> None:
     service = AccommodationService(db)
-    accommodation: Accommodation | None = service.get_by_id(accommodation_id)
+    accommodation: Accommodation | None = service._get_raw_by_id(accommodation_id)
 
     if not accommodation:
         raise AccommodationNotFoundError()

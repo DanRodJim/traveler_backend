@@ -15,8 +15,21 @@ class ExpenseService:
     def __init__(self, db: Session):
         self.db = db
     
-    def get_by_id(self, expense_id: uuid.UUID) -> Optional[Expense]:
+    def _get_raw_by_id(self, expense_id: uuid.UUID) -> Optional[Expense]:
         return self.db.query(Expense).filter(Expense.id == expense_id).first()
+
+    def get_by_id(self, expense_id: uuid.UUID, current_user_id: uuid.UUID) -> Optional[Expense]:
+        expense = self._get_raw_by_id(expense_id)
+        if not expense:
+            return None
+        if not expense.is_private:
+            return expense
+
+        is_visible = (
+            expense.paid_by == current_user_id
+            or any(s.user_id == current_user_id for s in expense.splits)
+        )
+        return expense if is_visible else None
     
     def get_all_by_trip(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> List[Expense]:
         public_expenses = (
@@ -48,14 +61,9 @@ class ExpenseService:
 
         return all_expenses
     
-    def get_total_by_trip(self, trip_id: uuid.UUID) -> Decimal:
-        result = self.db.query(Expense).filter(
-            Expense.trip_id == trip_id
-        ).with_entities(
-            Expense.amount
-        ).all()
-        
-        return sum((expense.amount for expense in result), Decimal("0"))
+    def get_total_by_trip(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> Decimal:
+        visible_expenses = self.get_all_by_trip(trip_id, current_user_id)
+        return sum((Decimal(str(e.amount)) for e in visible_expenses), Decimal("0"))
     
     def create_with_splits(self, expense_data: ExpenseCreate) -> Expense:
         expense_dict = expense_data.model_dump(exclude={'splits'})
@@ -92,7 +100,7 @@ class ExpenseService:
         expense_id: uuid.UUID,
         expense_data: ExpenseUpdate
     ) -> Expense | None:
-        expense = self.get_by_id(expense_id)
+        expense = self._get_raw_by_id(expense_id)
         
         if not expense:
             return None
@@ -132,7 +140,7 @@ class ExpenseService:
         return self.update_with_splits(expense_id, expense_data)
     
     def delete(self, expense_id: uuid.UUID) -> bool:
-        expense = self.get_by_id(expense_id)
+        expense = self._get_raw_by_id(expense_id)
         
         if not expense:
             return False
@@ -148,7 +156,7 @@ class ExpenseService:
         split_id: uuid.UUID,
         current_user_id: uuid.UUID
     ) -> ExpenseSplit:
-        expense = self.get_by_id(expense_id)
+        expense = self._get_raw_by_id(expense_id)
         if not expense:
             raise ExpenseNotFoundError()
 
@@ -182,7 +190,7 @@ class ExpenseService:
         split_id: uuid.UUID,
         current_user_id: uuid.UUID
     ) -> ExpenseSplit:
-        expense = self.get_by_id(expense_id)
+        expense = self._get_raw_by_id(expense_id)
         if not expense:
             raise ExpenseNotFoundError()
 

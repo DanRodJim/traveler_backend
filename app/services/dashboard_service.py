@@ -1,15 +1,29 @@
 import uuid
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 from app.models import Accommodation, Activity, Expense, ExpenseSplit, Flight, Trip, TripMember
+from app.models.accommodation import AccommodationSplit
+from app.models.activity import ActivitySplit
+from app.models.flight import FlightSplit
+from app.services.accommodation_service import AccommodationService
+from app.services.activity_service import ActivityService
 from app.services.budget_service import BudgetService
+from app.services.expense_service import ExpenseService
 from app.services.personal_budget_service import PersonalBudgetService
+
 
 class DashboardService:
     def __init__(self, db: Session):
         self.db = db
+
+    _SPLIT_SOURCES = [
+        ("expense", Expense, ExpenseSplit, "expense_id", "title"),
+        ("flight", Flight, FlightSplit, "flight_id", None),
+        ("accommodation", Accommodation, AccommodationSplit, "accommodation_id", "name"),
+        ("activity", Activity, ActivitySplit, "activity_id", "title"),
+    ]
     
     def get_user_trip_ids(self, user_id: uuid.UUID) -> List[uuid.UUID]:
         trip_ids = self.db.query(TripMember.trip_id).filter(
@@ -55,61 +69,70 @@ class DashboardService:
 
         return total_expenses_dict
     
-    def get_expenses_by_category(self, trip_ids: List[uuid.UUID]) -> Dict[str, float]:
-        expenses_by_category = self.db.query(
-            Expense.category,
-            func.sum(Expense.amount)
-        ).filter(
-            Expense.trip_id.in_(trip_ids)
-        ).group_by(Expense.category).all()
-        
-        return {
-            category: float(total) for category, total in expenses_by_category
+    def get_expenses_by_category(
+        self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID
+    ) -> Dict[str, float]:
+        expense_service = ExpenseService(self.db)
+        category_totals: Dict[str, float] = {}
+
+        for trip_id in trip_ids:
+            visible_expenses = expense_service.get_all_by_trip(trip_id, current_user_id)
+            for e in visible_expenses:
+                category_totals[e.category] = category_totals.get(e.category, 0) + float(e.amount)
+
+        return category_totals
+
+
+    def get_expenses_by_type(
+        self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID
+    ) -> Dict[str, float]:
+        expense_service = ExpenseService(self.db)
+        activity_service = ActivityService(self.db)
+        accommodation_service = AccommodationService(self.db)
+
+        totals = {
+            "Manual Expenses": 0.0,
+            "Activities": 0.0,
+            "Flights": 0.0,
+            "Accommodations": 0.0,
         }
-    
-    def get_expenses_by_type(self, trip_ids: List[uuid.UUID]) -> Dict[str, float]:
-        expense_type_totals = {}
-        
-        manual_total = self.db.query(
-            func.sum(Expense.amount)
-        ).filter(
-            Expense.trip_id.in_(trip_ids)
-        ).scalar() or 0
-        
-        if manual_total > 0:
-            expense_type_totals['Manual Expenses'] = float(manual_total)
-        
-        activities_total = self.db.query(
-            func.sum(Activity.cost)
-        ).filter(
-            Activity.trip_id.in_(trip_ids),
-            Activity.cost.isnot(None)
-        ).scalar() or 0
-        
-        if activities_total > 0:
-            expense_type_totals['Activities'] = float(activities_total)
-        
-        flights_total = self.db.query(
-            func.sum(Flight.cost)
-        ).filter(
-            Flight.trip_id.in_(trip_ids),
-            Flight.cost.isnot(None)
-        ).scalar() or 0
-        
-        if flights_total > 0:
-            expense_type_totals['Flights'] = float(flights_total)
-        
-        accommodations_total = self.db.query(
-            func.sum(Accommodation.cost)
-        ).filter(
-            Accommodation.trip_id.in_(trip_ids),
-            Accommodation.cost.isnot(None)
-        ).scalar() or 0
-        
-        if accommodations_total > 0:
-            expense_type_totals['Accommodations'] = float(accommodations_total)
-        
-        return expense_type_totals
+
+        for trip_id in trip_ids:
+            for e in expense_service.get_all_by_trip(trip_id, current_user_id):
+                totals["Manual Expenses"] += float(e.amount)
+
+            for act in activity_service.get_all_by_trip(trip_id, current_user_id):
+                if act.cost:
+                    totals["Activities"] += float(act.cost)
+
+            for acc in accommodation_service.get_all_by_trip(trip_id, current_user_id):
+                if acc.cost:
+                    totals["Accommodations"] += float(acc.cost)
+
+            public_flights = self.db.query(Flight).filter(
+                Flight.trip_id == trip_id, Flight.is_private == False
+            ).all()
+            private_flights = (
+                self.db.query(Flight)
+                .outerjoin(FlightSplit, FlightSplit.flight_id == Flight.id)
+                .filter(
+                    Flight.trip_id == trip_id,
+                    Flight.is_private == True,
+                    or_(
+                        Flight.paid_by == current_user_id,
+                        Flight.created_by == current_user_id,
+                        FlightSplit.user_id == current_user_id,
+                    ),
+                )
+                .distinct()
+                .all()
+            )
+            visible_flights = list({f.id: f for f in public_flights + private_flights}.values())
+            for f in visible_flights:
+                if f.cost:
+                    totals["Flights"] += float(f.cost)
+
+        return {k: v for k, v in totals.items() if v > 0}
     
     async def get_top_trips_by_spending(
         self, trip_ids: list, current_user_id: uuid.UUID, limit: int = 5
@@ -175,87 +198,105 @@ class DashboardService:
             "days_until": (next_trip.start_date - today).days
         }
     
-    def get_activities_by_category(self, trip_ids: List[uuid.UUID]) -> Dict[str, int]:
-        activities_by_category = self.db.query(
-            Activity.category,
-            func.count(Activity.id)
-        ).filter(
-            Activity.trip_id.in_(trip_ids)
-        ).group_by(Activity.category).all()
-        
-        return {str(category): count for category, count in activities_by_category}
-    
-    def get_accommodations_by_type(self, trip_ids: List[uuid.UUID]) -> Dict[str, int]:
-        accommodations_by_type = self.db.query(
-            Accommodation.type,
-            func.count(Accommodation.id)
-        ).filter(
-            Accommodation.trip_id.in_(trip_ids)
-        ).group_by(Accommodation.type).all()
-        
-        return {str(acc_type): count for acc_type, count in accommodations_by_type}
+    def get_activities_by_category(
+        self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID
+    ) -> Dict[str, int]:
+        activity_service = ActivityService(self.db)
+        category_counts: Dict[str, int] = {}
+
+        for trip_id in trip_ids:
+            for act in activity_service.get_all_by_trip(trip_id, current_user_id):
+                category_counts[act.category] = category_counts.get(act.category, 0) + 1
+
+        return category_counts
+
+
+    def get_accommodations_by_type(
+        self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID
+    ) -> Dict[str, int]:
+        accommodation_service = AccommodationService(self.db)
+        type_counts: Dict[str, int] = {}
+
+        for trip_id in trip_ids:
+            for acc in accommodation_service.get_all_by_trip(trip_id, current_user_id):
+                type_counts[acc.type] = type_counts.get(acc.type, 0) + 1
+
+        return type_counts
+
+    def _describe_item(self, item_type: str, item) -> str:
+        if item_type == "flight":
+            return f"{item.departure_airport} → {item.arrival_airport}"
+        if item_type == "accommodation":
+            return item.name
+        return item.title
 
     def get_pending_splits_owed_by_me(
-        self,
-        current_user_id: uuid.UUID,
-        trip_ids: list
+        self, current_user_id: uuid.UUID, trip_ids: list
     ) -> list:
-        results = (
-            self.db.query(ExpenseSplit, Expense, Trip)
-            .join(Expense, ExpenseSplit.expense_id == Expense.id)
-            .join(Trip, Expense.trip_id == Trip.id)
-            .filter(
-                Expense.trip_id.in_(trip_ids),
-                ExpenseSplit.user_id == current_user_id,
-                ExpenseSplit.is_paid == False,
-                Expense.paid_by != current_user_id,
-            )
-            .all()
-        )
+        results = []
 
-        return [
-            {
-                "split_id": str(split.id),
-                "expense_title": expense.title,
-                "trip_id": str(trip.id),
-                "trip_title": trip.title,
-                "amount": float(split.amount),
-                "currency": expense.currency,
-                "paid_by": str(expense.paid_by),
-            }
-            for split, expense, trip in results
-        ]
+        for item_type, model, split_model, fk_field, _ in self._SPLIT_SOURCES:
+            rows = (
+                self.db.query(split_model, model, Trip)
+                .join(model, getattr(split_model, fk_field) == model.id)
+                .join(Trip, model.trip_id == Trip.id)
+                .filter(
+                    model.trip_id.in_(trip_ids),
+                    split_model.user_id == current_user_id,
+                    split_model.is_paid == False,
+                    model.paid_by != current_user_id,
+                )
+                .all()
+            )
+
+            for split, item, trip in rows:
+                results.append({
+                    "split_id": str(split.id),
+                    "item_type": item_type,
+                    "expense_title": self._describe_item(item_type, item),
+                    "trip_id": str(trip.id),
+                    "trip_title": trip.title,
+                    "amount": float(split.amount),
+                    "currency": item.currency or "USD",
+                    "paid_by": str(item.paid_by),
+                })
+
+        return results
+
 
     def get_pending_splits_owed_to_me(
-        self,
-        current_user_id: uuid.UUID,
-        trip_ids: list
+        self, current_user_id: uuid.UUID, trip_ids: list
     ) -> list:
-        results = (
-            self.db.query(ExpenseSplit, Expense, Trip)
-            .join(Expense, ExpenseSplit.expense_id == Expense.id)
-            .join(Trip, Expense.trip_id == Trip.id)
-            .filter(
-                Expense.trip_id.in_(trip_ids),
-                Expense.paid_by == current_user_id,
-                ExpenseSplit.user_id != current_user_id,
-                ExpenseSplit.is_paid == False,
-            )
-            .all()
-        )
+        """Splits pendientes que OTROS me deben a mí, a través de los 4 tipos con split."""
+        results = []
 
-        return [
-            {
-                "split_id": str(split.id),
-                "expense_title": expense.title,
-                "trip_id": str(trip.id),
-                "trip_title": trip.title,
-                "amount": float(split.amount),
-                "currency": expense.currency,
-                "owed_by": str(split.user_id),
-            }
-            for split, expense, trip in results
-        ]
+        for item_type, model, split_model, fk_field, _ in self._SPLIT_SOURCES:
+            rows = (
+                self.db.query(split_model, model, Trip)
+                .join(model, getattr(split_model, fk_field) == model.id)
+                .join(Trip, model.trip_id == Trip.id)
+                .filter(
+                    model.trip_id.in_(trip_ids),
+                    model.paid_by == current_user_id,
+                    split_model.user_id != current_user_id,
+                    split_model.is_paid == False,
+                )
+                .all()
+            )
+
+            for split, item, trip in rows:
+                results.append({
+                    "split_id": str(split.id),
+                    "item_type": item_type,
+                    "expense_title": self._describe_item(item_type, item),
+                    "trip_id": str(trip.id),
+                    "trip_title": trip.title,
+                    "amount": float(split.amount),
+                    "currency": item.currency or "USD",
+                    "owed_by": str(split.user_id),
+                })
+
+        return results
 
     async def get_budget_alerts(self, trip_ids: list) -> list:
         trips = (

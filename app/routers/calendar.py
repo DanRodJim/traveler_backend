@@ -18,4 +18,4 @@ async def get_calendar_events(
         return []
 
     calendar_service = CalendarService(db)
-    return calendar_service.get_events(trip_ids)
+    return calendar_service.get_events(trip_ids, current_user.id)

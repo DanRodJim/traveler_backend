@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -18,20 +19,50 @@ class ActivityService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all_by_trip(self, trip_id: uuid.UUID) -> List[Activity]:
-        return self.db.query(Activity).filter(
-            Activity.trip_id == trip_id
-        ).order_by(Activity.start_time).all()
+    def _get_visible_activities_query(self, trip_id: uuid.UUID, current_user_id: uuid.UUID):
+        public = self.db.query(Activity).filter(
+            Activity.trip_id == trip_id, Activity.is_private == False
+        )
+        private = (
+            self.db.query(Activity)
+            .outerjoin(ActivitySplit, ActivitySplit.activity_id == Activity.id)
+            .filter(
+                Activity.trip_id == trip_id,
+                Activity.is_private == True,
+                or_(
+                    Activity.paid_by == current_user_id,
+                    Activity.created_by == current_user_id,
+                    ActivitySplit.user_id == current_user_id,
+                ),
+            )
+        )
+        return public, private
 
-    def get_by_date(self, trip_id: uuid.UUID, activity_date: str) -> List[Activity]:
+    def get_all_by_trip(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> List[Activity]:
+        public, private = self._get_visible_activities_query(trip_id, current_user_id)
+        return sorted({a.id: a for a in public.all() + private.distinct().all()}.values(), key=lambda a: (a.activity_date, a.start_time or datetime.min.time()))
+
+    def get_by_date(self, trip_id: uuid.UUID, activity_date: str, current_user_id: uuid.UUID) -> List[Activity]:
         date_obj = datetime.fromisoformat(activity_date).date()
+        all_items = self.get_all_by_trip(trip_id, current_user_id)
+        return [a for a in all_items if a.activity_date == date_obj]
 
-        return self.db.query(Activity).filter(
-            Activity.trip_id == trip_id,
-            Activity.activity_date == date_obj
-        ).order_by(Activity.start_time).all()
+    def get_by_id(self, activity_id: uuid.UUID, current_user_id: uuid.UUID) -> Optional[Activity]:
+        activity = self.db.query(Activity).filter(Activity.id == activity_id).first()
+        if not activity:
+            return None
+        if not activity.is_private:
+            return activity
 
-    def get_by_id(self, activity_id: uuid.UUID) -> Optional[Activity]:
+        is_visible = (
+            activity.paid_by == current_user_id
+            or activity.created_by == current_user_id
+            or any(s.user_id == current_user_id for s in activity.splits)
+        )
+        return activity if is_visible else None
+
+    def _get_raw_by_id(self, activity_id: uuid.UUID) -> Optional[Activity]:
+        """Sin filtro de visibilidad — para uso interno en create/update/delete/splits."""
         return self.db.query(Activity).filter(Activity.id == activity_id).first()
 
     async def create_with_splits(self, activity_data: ActivityCreate, created_by: uuid.UUID) -> Activity:
@@ -75,7 +106,7 @@ class ActivityService:
     async def update_with_splits(
         self, activity_id: uuid.UUID, activity_data: ActivityUpdate
     ) -> Optional[Activity]:
-        activity = self.get_by_id(activity_id)
+        activity = self._get_raw_by_id(activity_id)
         if not activity:
             return None
 
@@ -122,7 +153,7 @@ class ActivityService:
         return await self.update_with_splits(activity_id, activity_data)
 
     def delete(self, activity_id: uuid.UUID) -> bool:
-        activity = self.get_by_id(activity_id)
+        activity = self._get_raw_by_id(activity_id)
         if not activity:
             return False
 
@@ -133,7 +164,7 @@ class ActivityService:
     def mark_split_as_paid(
         self, activity_id: uuid.UUID, split_id: uuid.UUID, current_user_id: uuid.UUID
     ) -> ActivitySplit:
-        activity = self.get_by_id(activity_id)
+        activity = self._get_raw_by_id(activity_id)
         if not activity:
             raise ActivityNotFoundError()
 
@@ -159,7 +190,7 @@ class ActivityService:
     def unmark_split_as_paid(
         self, activity_id: uuid.UUID, split_id: uuid.UUID, current_user_id: uuid.UUID
     ) -> ActivitySplit:
-        activity = self.get_by_id(activity_id)
+        activity = self._get_raw_by_id(activity_id)
         if not activity:
             raise ActivityNotFoundError()
 

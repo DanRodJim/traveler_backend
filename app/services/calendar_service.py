@@ -1,19 +1,39 @@
 from typing import List, Dict
 import uuid
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.trip import Trip
-from app.models.activity import Activity
-from app.models.flight import Flight
-from app.models.accommodation import Accommodation
+from app.models.activity import Activity, ActivitySplit
+from app.models.flight import Flight, FlightSplit
+from app.models.accommodation import Accommodation, AccommodationSplit
 
 
 class CalendarService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_events(self, trip_ids: List[uuid.UUID]) -> List[Dict]:
+    def _visible(self, model, split_model, split_fk, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID):
+        public = self.db.query(model).filter(
+            model.trip_id.in_(trip_ids), model.is_private == False
+        )
+        private = (
+            self.db.query(model)
+            .outerjoin(split_model, getattr(split_model, split_fk) == model.id)
+            .filter(
+                model.trip_id.in_(trip_ids),
+                model.is_private == True,
+                or_(
+                    model.paid_by == current_user_id,
+                    model.created_by == current_user_id,
+                    split_model.user_id == current_user_id,
+                ),
+            )
+        )
+        return list({item.id: item for item in public.all() + private.distinct().all()}.values())
+
+    def get_events(self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID) -> List[Dict]:
         events: List[Dict] = []
 
         trips = {
@@ -21,12 +41,7 @@ class CalendarService:
             for t in self.db.query(Trip).filter(Trip.id.in_(trip_ids)).all()
         }
 
-        # Flights
-        flights = (
-            self.db.query(Flight)
-            .filter(Flight.trip_id.in_(trip_ids))
-            .all()
-        )
+        flights = self._visible(Flight, FlightSplit, "flight_id", trip_ids, current_user_id)
         for flight in flights:
             events.append({
                 "id": f"flight-{flight.id}",
@@ -40,12 +55,7 @@ class CalendarService:
                 "item_id": str(flight.id),
             })
 
-        # Accommodations — range event (check-in to check-out)
-        accommodations = (
-            self.db.query(Accommodation)
-            .filter(Accommodation.trip_id.in_(trip_ids))
-            .all()
-        )
+        accommodations = self._visible(Accommodation, AccommodationSplit, "accommodation_id", trip_ids, current_user_id)
         for acc in accommodations:
             events.append({
                 "id": f"accommodation-{acc.id}",
@@ -59,12 +69,7 @@ class CalendarService:
                 "item_id": str(acc.id),
             })
 
-        # Activities
-        activities = (
-            self.db.query(Activity)
-            .filter(Activity.trip_id.in_(trip_ids))
-            .all()
-        )
+        activities = self._visible(Activity, ActivitySplit, "activity_id", trip_ids, current_user_id)
         for activity in activities:
             events.append({
                 "id": f"activity-{activity.id}",

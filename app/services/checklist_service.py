@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.models.checklist_item import ChecklistItem
+from app.models.trip_member import TripMember
 from app.schemas.checklist_item import (
     ChecklistItemCreate,
     ChecklistItemUpdate,
@@ -40,6 +41,22 @@ class ChecklistService:
             ChecklistItem.id == item_id
         ).first()
 
+    def _authorize_item_action(self, item: ChecklistItem, current_user_id: uuid.UUID) -> None:
+        if item.created_by != current_user_id:
+            raise UnauthorizedError("Only the owner can modify this item")
+
+        is_member = (
+            self.db.query(TripMember)
+            .filter(
+                TripMember.trip_id == item.trip_id,
+                TripMember.user_id == current_user_id,
+            )
+            .first()
+            is not None
+        )
+        if not is_member:
+            raise UnauthorizedError("You are not a member of this trip")
+
     def create(
         self,
         trip_id: uuid.UUID,
@@ -69,8 +86,8 @@ class ChecklistService:
         item = self.get_by_id(item_id)
         if not item:
             raise ChecklistNotFoundError()
-        if item.created_by != current_user_id:
-            raise UnauthorizedError("Only the creator can edit this item")
+
+        self._authorize_item_action(item, current_user_id)
 
         update_dict = item_data.model_dump(exclude_unset=True)
         for key, value in update_dict.items():
@@ -90,8 +107,8 @@ class ChecklistService:
         item = self.get_by_id(item_id)
         if not item:
             raise ChecklistNotFoundError()
-        if item.created_by != current_user_id:
-            raise UnauthorizedError("Only the creator can complete this item")
+
+        self._authorize_item_action(item, current_user_id)
 
         item.is_completed = is_completed
         item.completed_at = datetime.now(timezone.utc) if is_completed else None
@@ -108,8 +125,8 @@ class ChecklistService:
         item = self.get_by_id(item_id)
         if not item:
             raise ChecklistNotFoundError()
-        if item.created_by != current_user_id:
-            raise UnauthorizedError("Only the creator can delete this item")
+
+        self._authorize_item_action(item, current_user_id)
 
         self.db.delete(item)
         self.db.commit()

@@ -16,7 +16,7 @@ from app.core.exceptions import (
     UnauthorizedError,
     TripNotFoundError,
 )
-from app.common.types import InvitationStatus, MemberRole
+from app.common.types import InvitationStatus
 from app.schemas.trip_invitation import TripInvitationCreate, MyInvitationResponse
 from app.services.notification_service import NotificationService
 from app.services.email_service import EmailService
@@ -172,10 +172,16 @@ class InvitationService:
     def get_by_token(self, token: str) -> Optional[TripInvitation]:
         return self.db.query(TripInvitation).filter(TripInvitation.token == token).first()
 
-    def get_invitation_details_by_token(self, token: str) -> Optional[MyInvitationResponse]:
+    def get_invitation_details_by_token(
+        self, token: str, current_user: User
+    ) -> Optional[MyInvitationResponse]:
         invitation = self.get_by_token(token)
         if not invitation:
             return None
+
+        if invitation.invited_email.lower() != current_user.email.lower():
+            return None
+
         return self._to_my_invitation_response(invitation)
 
     def _expire_stale_invitations(self, user_email: str) -> None:

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-import uuid
 
 from app.database.db import get_db
 from app.schemas.user import NotificationPreferenceUpdate, UserResponse, UserUpdate, PasswordChange
@@ -32,32 +31,18 @@ async def update_my_profile(
     db: Session = Depends(get_db)
 ) -> UserResponse:
     service = UserService(db)
-    
+
     if user_data.email and user_data.email != current_user.email:
         existing = service.get_by_email(user_data.email)
         if existing:
             raise DuplicateResourceError("Email", "email")
-    
+
     updated_user: User | None = service.update(current_user.id, user_data)
     if not updated_user:
         raise UserNotFoundError()
-    
+
     return UserResponse.model_validate(updated_user)
 
-
-@router.get("/{user_id}")
-async def get_user_by_id(
-    user_id: uuid.UUID,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-) -> UserResponse:
-    service = UserService(db)
-    user: User | None = service.get_by_id(user_id)
-    
-    if not user:
-        raise UserNotFoundError()
-    
-    return UserResponse.model_validate(user)
 
 @router.put("/me/password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_my_password(

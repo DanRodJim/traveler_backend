@@ -20,7 +20,7 @@ from app.core.exceptions import (
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 
-@router.get("/")
+@router.get("/", response_model=List[ActivityResponse])
 async def get_activities(
     trip_id: uuid.UUID,
     date: Optional[str] = None,
@@ -32,23 +32,22 @@ async def get_activities(
         raise UnauthorizedError("Not authorized to view this trip")
 
     service = ActivityService(db)
-
     if date:
-        activities: List[Activity] = service.get_by_date(trip_id, date)
+        activities = service.get_by_date(trip_id, date, current_user.id)
     else:
-        activities: List[Activity] = service.get_all_by_trip(trip_id)
+        activities = service.get_all_by_trip(trip_id, current_user.id)
 
-    return [ActivityResponse.model_validate(activity) for activity in activities]
+    return [ActivityResponse.model_validate(a) for a in activities]
 
 
-@router.get("/{activity_id}")
+@router.get("/{activity_id}", response_model=ActivityResponse)
 async def get_activity(
     activity_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> ActivityResponse:
     service = ActivityService(db)
-    activity: Activity | None = service.get_by_id(activity_id)
+    activity = service.get_by_id(activity_id, current_user.id)
 
     if not activity:
         raise ActivityNotFoundError()
@@ -84,7 +83,7 @@ async def update_activity(
     db: Session = Depends(get_db)
 ) -> ActivityResponse:
     service = ActivityService(db)
-    activity: Activity | None = service.get_by_id(activity_id)
+    activity: Activity | None = service._get_raw_by_id(activity_id)
 
     if not activity:
         raise ActivityNotFoundError()
@@ -107,7 +106,7 @@ async def delete_activity(
     db: Session = Depends(get_db)
 ) -> None:
     service = ActivityService(db)
-    activity: Activity | None = service.get_by_id(activity_id)
+    activity: Activity | None = service._get_raw_by_id(activity_id)
 
     if not activity:
         raise ActivityNotFoundError()

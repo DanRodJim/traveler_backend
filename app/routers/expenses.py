@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from typing import List
-from decimal import Decimal
+from typing import List, Dict
 import uuid
 
 from app.database.db import get_db
@@ -36,39 +35,38 @@ async def get_expenses(
     return [ExpenseResponse.model_validate(expense) for expense in expenses]
 
 
-@router.get("/total/{trip_id}")
-async def get_total_expenses(
-    trip_id: uuid.UUID,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-) -> dict:
-    trip_service = TripService(db)
-    if not trip_service.has_view_permission(trip_id, current_user.id):
-        raise UnauthorizedError("Not authorized to view this trip")
-    
-    service = ExpenseService(db)
-    total: Decimal = service.get_total_by_trip(trip_id)
-    
-    return {"trip_id": str(trip_id), "total": float(total)}
-
-
-@router.get("/{expense_id}")
+@router.get("/{expense_id}", response_model=ExpenseResponse)
 async def get_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> ExpenseResponse:
     service = ExpenseService(db)
-    expense: Expense | None = service.get_by_id(expense_id)
-    
+    expense = service.get_by_id(expense_id, current_user.id)
+
     if not expense:
         raise ExpenseNotFoundError()
-    
+
     trip_service = TripService(db)
     if not trip_service.has_view_permission(expense.trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this expense")
-    
+
     return ExpenseResponse.model_validate(expense)
+
+
+@router.get("/total/{trip_id}")
+async def get_total_expenses(
+    trip_id: uuid.UUID,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Dict:
+    trip_service = TripService(db)
+    if not trip_service.has_view_permission(trip_id, current_user.id):
+        raise UnauthorizedError("Not authorized to view this trip")
+
+    service = ExpenseService(db)
+    total = service.get_total_by_trip(trip_id, current_user.id)
+    return {"trip_id": str(trip_id), "total": float(total)}
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -95,7 +93,7 @@ async def update_expense(
     db: Session = Depends(get_db)
 ) -> ExpenseResponse:
     service = ExpenseService(db)
-    expense: Expense | None = service.get_by_id(expense_id)
+    expense: Expense | None = service._get_raw_by_id(expense_id)
     
     if not expense:
         raise ExpenseNotFoundError()
@@ -118,7 +116,7 @@ async def delete_expense(
     db: Session = Depends(get_db)
 ) -> None:
     service = ExpenseService(db)
-    expense: Expense | None = service.get_by_id(expense_id)
+    expense: Expense | None = service._get_raw_by_id(expense_id)
     
     if not expense:
         raise ExpenseNotFoundError()
