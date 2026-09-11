@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, time
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -12,13 +13,56 @@ class FlightService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all_by_trip(self, trip_id: uuid.UUID) -> List[Flight]:
-        return self.db.query(Flight).filter(
-            Flight.trip_id == trip_id
-        ).order_by(Flight.departure_date, Flight.departure_time).all()
+    def _get_visible_flights_query(self, trip_id: uuid.UUID, current_user_id: uuid.UUID):
+        public = self.db.query(Flight).filter(
+            Flight.trip_id == trip_id, Flight.is_private == False
+        )
+        private = (
+            self.db.query(Flight)
+            .outerjoin(FlightSplit, FlightSplit.flight_id == Flight.id)
+            .filter(
+                Flight.trip_id == trip_id,
+                Flight.is_private == True,
+                or_(
+                    Flight.paid_by == current_user_id,
+                    Flight.created_by == current_user_id,
+                    FlightSplit.user_id == current_user_id,
+                ),
+            )
+        )
+        return public, private
 
-    def get_by_id(self, flight_id: uuid.UUID) -> Optional[Flight]:
+    def get_all_by_trip(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> List[Flight]:
+        public, private = self._get_visible_flights_query(trip_id, current_user_id)
+        flights = {f.id: f for f in public.all() + private.distinct().all()}.values()
+        return sorted(
+            flights,
+            key=lambda f: (f.departure_date, f.departure_time or time.min)
+        )
+
+    def get_raw_by_id(self, flight_id: uuid.UUID) -> Optional[Flight]:
+        """Unfiltered lookup by primary key. Only for internal/authorized use
+        (create/update/delete, payer actions) where visibility filtering
+        either doesn't apply or is enforced separately (edit permission,
+        payer check). Do NOT use this to serve flight data to a viewer."""
         return self.db.query(Flight).filter(Flight.id == flight_id).first()
+
+    def get_by_id(self, flight_id: uuid.UUID, current_user_id: uuid.UUID) -> Optional[Flight]:
+        """Visibility-checked lookup. Returns None if the flight doesn't
+        exist OR if it's private and the requesting user is not the
+        creator, payer, or a split participant."""
+        flight = self.get_raw_by_id(flight_id)
+        if not flight:
+            return None
+        if not flight.is_private:
+            return flight
+
+        is_visible = (
+            flight.paid_by == current_user_id
+            or flight.created_by == current_user_id
+            or any(s.user_id == current_user_id for s in flight.splits)
+        )
+        return flight if is_visible else None
 
     def create_with_splits(self, flight_data: FlightCreate, created_by: uuid.UUID) -> Flight:
         flight_dict = flight_data.model_dump(exclude={'splits'})
@@ -56,7 +100,7 @@ class FlightService:
         flight_id: uuid.UUID,
         flight_data: FlightUpdate
     ) -> Optional[Flight]:
-        flight = self.get_by_id(flight_id)
+        flight = self.get_raw_by_id(flight_id)
         if not flight:
             return None
 
@@ -91,7 +135,7 @@ class FlightService:
         return self.update_with_splits(flight_id, flight_data)
 
     def delete(self, flight_id: uuid.UUID) -> bool:
-        flight = self.get_by_id(flight_id)
+        flight = self.get_raw_by_id(flight_id)
         if not flight:
             return False
 
@@ -105,7 +149,7 @@ class FlightService:
         split_id: uuid.UUID,
         current_user_id: uuid.UUID
     ) -> FlightSplit:
-        flight = self.get_by_id(flight_id)
+        flight = self.get_raw_by_id(flight_id)
         if not flight:
             raise FlightNotFoundError()
 
@@ -134,7 +178,7 @@ class FlightService:
         split_id: uuid.UUID,
         current_user_id: uuid.UUID
     ) -> FlightSplit:
-        flight = self.get_by_id(flight_id)
+        flight = self.get_raw_by_id(flight_id)
         if not flight:
             raise FlightNotFoundError()
 

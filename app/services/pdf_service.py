@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 from io import BytesIO
 from decimal import Decimal
 import uuid
@@ -19,14 +19,12 @@ from app.models.flight import Flight
 from app.models.accommodation import Accommodation
 from app.models.trip_member import TripMember
 from app.models.user import User
-from app.core.exceptions import ResourceNotFoundError
+from app.core.exceptions import PdfNotFoundError
+from app.services.flight_service import FlightService
+from app.services.accommodation_service import AccommodationService
+from app.services.activity_service import ActivityService
 from app.services.personal_budget_service import PersonalBudgetService
 from app.services.currency_service import get_exchange_rates, convert_currency
-
-
-class PdfNotFoundError(ResourceNotFoundError):
-    def __init__(self):
-        super().__init__("Trip")
 
 
 PRIMARY_COLOR = colors.HexColor("#2563eb")
@@ -113,16 +111,19 @@ class PdfService:
             act.location or "-",
         ]
 
-    def generate_itinerary_pdf(self, trip_id: uuid.UUID) -> BytesIO:
+    def generate_itinerary_pdf(self, trip_id: uuid.UUID, current_user_id: uuid.UUID) -> BytesIO:
         trip = self._get_trip(trip_id)
 
-        flights = self.db.query(Flight).filter(Flight.trip_id == trip_id).all()
-        accommodations = self.db.query(Accommodation).filter(Accommodation.trip_id == trip_id).all()
-        activities = (
-            self.db.query(Activity)
-            .filter(Activity.trip_id == trip_id)
-            .order_by(Activity.activity_date, Activity.start_time)
-            .all()
+        # Use the same visibility-filtered queries as the rest of the app
+        # (public items, or private items where the caller is the creator,
+        # payer, or a split participant) instead of raw unrestricted
+        # queries, so this export can't be used to read other members'
+        # private itinerary data.
+        flights = FlightService(self.db).get_all_by_trip(trip_id, current_user_id)
+        accommodations = AccommodationService(self.db).get_all_by_trip(trip_id, current_user_id)
+        activities = ActivityService(self.db).get_all_by_trip(trip_id, current_user_id)
+        activities = sorted(
+            activities, key=lambda act: (act.activity_date, act.start_time or time.min)
         )
 
         buffer = BytesIO()
@@ -146,7 +147,7 @@ class PdfService:
         )
 
         if not flights and not accommodations and not activities:
-            elements.append(Paragraph("No itinerary items yet.", self.styles["Normal"]))
+            elements.append(Paragraph("No itinerary items visible to you yet.", self.styles["Normal"]))
 
         doc.build(elements)
         buffer.seek(0)

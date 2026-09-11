@@ -37,10 +37,10 @@ async def get_dashboard_stats(
     return {
         "total_trips": len(trip_ids),
         "trips_by_status": service.get_trips_by_status(trip_ids),
-        "total_expenses": service.get_total_expenses_by_currency(trip_ids, current_user.id),
+        "total_expenses": await service.get_total_expenses_by_currency(trip_ids, current_user.id),
         "expenses_by_category": service.get_expenses_by_category(trip_ids, current_user.id),
         "expenses_by_trip": await service.get_top_trips_by_spending(trip_ids, current_user.id),
-        "upcoming_activities": service.get_upcoming_activities(trip_ids),
+        "upcoming_activities": service.get_upcoming_activities(trip_ids, current_user.id),
         "next_trip": service.get_next_trip(trip_ids),
         "expenses_by_type": service.get_expenses_by_type(trip_ids, current_user.id),
         "activities_by_category": service.get_activities_by_category(trip_ids, current_user.id),

@@ -29,7 +29,7 @@ async def get_flights(
         raise UnauthorizedError("Not authorized to view this trip")
 
     service = FlightService(db)
-    flights: List[Flight] = service.get_all_by_trip(trip_id)
+    flights: List[Flight] = service.get_all_by_trip(trip_id, current_user.id)
 
     return [FlightResponse.model_validate(flight) for flight in flights]
 
@@ -41,14 +41,23 @@ async def get_flight(
     db: Session = Depends(get_db)
 ) -> FlightResponse:
     service = FlightService(db)
-    flight: Flight | None = service.get_by_id(flight_id)
 
-    if not flight:
+    # Raw lookup only to resolve trip_id for the membership check below.
+    # The actual flight data returned to the caller always goes through
+    # the visibility-checked get_by_id() call further down.
+    raw_flight: Flight | None = service.get_raw_by_id(flight_id)
+    if not raw_flight:
         raise FlightNotFoundError()
 
     trip_service = TripService(db)
-    if not trip_service.has_view_permission(flight.trip_id, current_user.id):
+    if not trip_service.has_view_permission(raw_flight.trip_id, current_user.id):
         raise UnauthorizedError("Not authorized to view this flight")
+
+    flight: Flight | None = service.get_by_id(flight_id, current_user.id)
+    if not flight:
+        # Exists, but is private and this user isn't the creator, payer,
+        # or a split participant.
+        raise FlightNotFoundError()
 
     return FlightResponse.model_validate(flight)
 
@@ -77,7 +86,7 @@ async def update_flight(
     db: Session = Depends(get_db)
 ) -> FlightResponse:
     service = FlightService(db)
-    flight: Flight | None = service.get_by_id(flight_id)
+    flight: Flight | None = service.get_raw_by_id(flight_id)
 
     if not flight:
         raise FlightNotFoundError()
@@ -100,7 +109,7 @@ async def delete_flight(
     db: Session = Depends(get_db)
 ) -> None:
     service = FlightService(db)
-    flight: Flight | None = service.get_by_id(flight_id)
+    flight: Flight | None = service.get_raw_by_id(flight_id)
 
     if not flight:
         raise FlightNotFoundError()

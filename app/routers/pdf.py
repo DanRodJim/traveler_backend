@@ -21,7 +21,7 @@ async def export_itinerary_pdf(
     verify_trip_membership(db, trip_id, current_user.id)
 
     service = PdfService(db)
-    buffer = service.generate_itinerary_pdf(trip_id)
+    buffer = service.generate_itinerary_pdf(trip_id, current_user.id)
 
     return StreamingResponse(
         buffer,

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session, joinedload
 from app.common.types import MemberRole
-from app.models import MemberRole, Trip, TripMember
+from app.models import Trip, TripMember
 from app.schemas.trip import TripCreate, TripUpdate
 from typing import List, Optional
 import uuid

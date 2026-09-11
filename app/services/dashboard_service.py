@@ -1,8 +1,8 @@
 import uuid
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
-from typing import List, Dict, Any
-from datetime import datetime, timedelta
+from sqlalchemy import func
+from typing import Iterable, List, Dict, Any
+from datetime import datetime, timedelta, time
 from app.models import Accommodation, Activity, Expense, ExpenseSplit, Flight, Trip, TripMember
 from app.models.accommodation import AccommodationSplit
 from app.models.activity import ActivitySplit
@@ -11,6 +11,7 @@ from app.services.accommodation_service import AccommodationService
 from app.services.activity_service import ActivityService
 from app.services.budget_service import BudgetService
 from app.services.expense_service import ExpenseService
+from app.services.flight_service import FlightService
 from app.services.personal_budget_service import PersonalBudgetService
 
 
@@ -52,20 +53,20 @@ class DashboardService:
         
         return status_counts
     
-    def get_total_expenses_by_currency(
+    async def get_total_expenses_by_currency(
         self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID
     ) -> Dict[str, float]:
         personal_budget_service = PersonalBudgetService(self.db)
         total_expenses_dict: Dict[str, float] = {}
 
         for trip_id in trip_ids:
-            expense_items = personal_budget_service.get_my_expense_line_items(trip_id, current_user_id)
-            flight_items = personal_budget_service.get_my_flight_line_items(trip_id, current_user_id)
-            accommodation_items = personal_budget_service.get_my_accommodation_line_items(trip_id, current_user_id)
-            activity_items = personal_budget_service.get_my_activity_line_items(trip_id, current_user_id)
-
-            for _, amount, currency in expense_items + flight_items + accommodation_items + activity_items:
-                total_expenses_dict[currency] = total_expenses_dict.get(currency, 0) + float(amount)
+            spending = await personal_budget_service.calculate_personal_spending(
+                trip_id, current_user_id
+            )
+            currency = spending["currency"]
+            total_expenses_dict[currency] = (
+                total_expenses_dict.get(currency, 0) + spending["total_spent"]
+            )
 
         return total_expenses_dict
     
@@ -83,12 +84,17 @@ class DashboardService:
         return category_totals
 
 
+    @staticmethod
+    def _sum_cost(items: Iterable, attr: str) -> float:
+        return sum(float(getattr(item, attr)) for item in items if getattr(item, attr))
+
     def get_expenses_by_type(
         self, trip_ids: List[uuid.UUID], current_user_id: uuid.UUID
     ) -> Dict[str, float]:
         expense_service = ExpenseService(self.db)
         activity_service = ActivityService(self.db)
         accommodation_service = AccommodationService(self.db)
+        flight_service = FlightService(self.db)
 
         totals = {
             "Manual Expenses": 0.0,
@@ -98,39 +104,18 @@ class DashboardService:
         }
 
         for trip_id in trip_ids:
-            for e in expense_service.get_all_by_trip(trip_id, current_user_id):
-                totals["Manual Expenses"] += float(e.amount)
-
-            for act in activity_service.get_all_by_trip(trip_id, current_user_id):
-                if act.cost:
-                    totals["Activities"] += float(act.cost)
-
-            for acc in accommodation_service.get_all_by_trip(trip_id, current_user_id):
-                if acc.cost:
-                    totals["Accommodations"] += float(acc.cost)
-
-            public_flights = self.db.query(Flight).filter(
-                Flight.trip_id == trip_id, Flight.is_private == False
-            ).all()
-            private_flights = (
-                self.db.query(Flight)
-                .outerjoin(FlightSplit, FlightSplit.flight_id == Flight.id)
-                .filter(
-                    Flight.trip_id == trip_id,
-                    Flight.is_private == True,
-                    or_(
-                        Flight.paid_by == current_user_id,
-                        Flight.created_by == current_user_id,
-                        FlightSplit.user_id == current_user_id,
-                    ),
-                )
-                .distinct()
-                .all()
+            totals["Manual Expenses"] += self._sum_cost(
+                expense_service.get_all_by_trip(trip_id, current_user_id), "amount"
             )
-            visible_flights = list({f.id: f for f in public_flights + private_flights}.values())
-            for f in visible_flights:
-                if f.cost:
-                    totals["Flights"] += float(f.cost)
+            totals["Activities"] += self._sum_cost(
+                activity_service.get_all_by_trip(trip_id, current_user_id), "cost"
+            )
+            totals["Accommodations"] += self._sum_cost(
+                accommodation_service.get_all_by_trip(trip_id, current_user_id), "cost"
+            )
+            totals["Flights"] += self._sum_cost(
+                flight_service.get_all_by_trip(trip_id, current_user_id), "cost"
+            )
 
         return {k: v for k, v in totals.items() if v > 0}
     
@@ -155,17 +140,27 @@ class DashboardService:
         results.sort(key=lambda x: x["amount"], reverse=True)
         return results[:limit]
     
-    def get_upcoming_activities(self, trip_ids: List[uuid.UUID], days: int = 7, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_upcoming_activities(
+        self,
+        trip_ids: List[uuid.UUID],
+        current_user_id: uuid.UUID,
+        days: int = 7,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
         today = datetime.now().date()
-        
-        upcoming_activities = self.db.query(Activity).join(
-            Trip, Activity.trip_id == Trip.id
-        ).filter(
-            Trip.id.in_(trip_ids),
-            Activity.activity_date >= today,
-            Activity.activity_date <= today + timedelta(days=days)
-        ).order_by(Activity.activity_date, Activity.start_time).limit(limit).all()
-        
+        end_date = today + timedelta(days=days)
+        activity_service = ActivityService(self.db)
+        upcoming_activities: List[Activity] = []
+        for trip_id in trip_ids:
+            for act in activity_service.get_all_by_trip(trip_id, current_user_id):
+                if act.activity_date and today <= act.activity_date <= end_date:
+                    upcoming_activities.append(act)
+
+        upcoming_activities.sort(
+            key=lambda a: (a.activity_date, a.start_time or time.min)
+        )
+        upcoming_activities = upcoming_activities[:limit]
+
         return [
             {
                 "id": str(activity.id),
@@ -267,7 +262,6 @@ class DashboardService:
     def get_pending_splits_owed_to_me(
         self, current_user_id: uuid.UUID, trip_ids: list
     ) -> list:
-        """Splits pendientes que OTROS me deben a mí, a través de los 4 tipos con split."""
         results = []
 
         for item_type, model, split_model, fk_field, _ in self._SPLIT_SOURCES:

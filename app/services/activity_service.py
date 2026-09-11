@@ -61,8 +61,7 @@ class ActivityService:
         )
         return activity if is_visible else None
 
-    def _get_raw_by_id(self, activity_id: uuid.UUID) -> Optional[Activity]:
-        """Sin filtro de visibilidad — para uso interno en create/update/delete/splits."""
+    def get_raw_by_id(self, activity_id: uuid.UUID) -> Optional[Activity]:
         return self.db.query(Activity).filter(Activity.id == activity_id).first()
 
     async def create_with_splits(self, activity_data: ActivityCreate, created_by: uuid.UUID) -> Activity:
@@ -106,7 +105,7 @@ class ActivityService:
     async def update_with_splits(
         self, activity_id: uuid.UUID, activity_data: ActivityUpdate
     ) -> Optional[Activity]:
-        activity = self._get_raw_by_id(activity_id)
+        activity = self.get_raw_by_id(activity_id)
         if not activity:
             return None
 
@@ -153,7 +152,7 @@ class ActivityService:
         return await self.update_with_splits(activity_id, activity_data)
 
     def delete(self, activity_id: uuid.UUID) -> bool:
-        activity = self._get_raw_by_id(activity_id)
+        activity = self.get_raw_by_id(activity_id)
         if not activity:
             return False
 
@@ -164,7 +163,7 @@ class ActivityService:
     def mark_split_as_paid(
         self, activity_id: uuid.UUID, split_id: uuid.UUID, current_user_id: uuid.UUID
     ) -> ActivitySplit:
-        activity = self._get_raw_by_id(activity_id)
+        activity = self.get_raw_by_id(activity_id)
         if not activity:
             raise ActivityNotFoundError()
 
@@ -190,7 +189,7 @@ class ActivityService:
     def unmark_split_as_paid(
         self, activity_id: uuid.UUID, split_id: uuid.UUID, current_user_id: uuid.UUID
     ) -> ActivitySplit:
-        activity = self._get_raw_by_id(activity_id)
+        activity = self.get_raw_by_id(activity_id)
         if not activity:
             raise ActivityNotFoundError()
 

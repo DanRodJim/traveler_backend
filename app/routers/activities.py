@@ -20,7 +20,7 @@ from app.core.exceptions import (
 router = APIRouter(prefix="/api/activities", tags=["activities"])
 
 
-@router.get("/", response_model=List[ActivityResponse])
+@router.get("/")
 async def get_activities(
     trip_id: uuid.UUID,
     date: Optional[str] = None,
@@ -40,7 +40,7 @@ async def get_activities(
     return [ActivityResponse.model_validate(a) for a in activities]
 
 
-@router.get("/{activity_id}", response_model=ActivityResponse)
+@router.get("/{activity_id}")
 async def get_activity(
     activity_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),
@@ -83,7 +83,7 @@ async def update_activity(
     db: Session = Depends(get_db)
 ) -> ActivityResponse:
     service = ActivityService(db)
-    activity: Activity | None = service._get_raw_by_id(activity_id)
+    activity: Activity | None = service.get_raw_by_id(activity_id)
 
     if not activity:
         raise ActivityNotFoundError()
@@ -106,7 +106,7 @@ async def delete_activity(
     db: Session = Depends(get_db)
 ) -> None:
     service = ActivityService(db)
-    activity: Activity | None = service._get_raw_by_id(activity_id)
+    activity: Activity | None = service.get_raw_by_id(activity_id)
 
     if not activity:
         raise ActivityNotFoundError()

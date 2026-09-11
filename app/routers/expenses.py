@@ -35,7 +35,7 @@ async def get_expenses(
     return [ExpenseResponse.model_validate(expense) for expense in expenses]
 
 
-@router.get("/{expense_id}", response_model=ExpenseResponse)
+@router.get("/{expense_id}")
 async def get_expense(
     expense_id: uuid.UUID,
     current_user: User = Depends(get_current_active_user),

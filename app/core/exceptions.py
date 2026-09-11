@@ -99,6 +99,11 @@ class EstimationNotFoundError(ResourceNotFoundError):
     def __init__(self):
         super().__init__("Estimation")
 
+
+class PdfNotFoundError(ResourceNotFoundError):
+    def __init__(self):
+        super().__init__("Trip")
+
 # --- Authorization errors ---
 
 class UnauthorizedError(AppException):
