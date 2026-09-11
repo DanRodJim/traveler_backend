@@ -25,19 +25,6 @@ async def get_trip_balances(
     return service.calculate_trip_balances(trip_id, current_user.id)
 
 
-@router.get("/trip/{trip_id}/user/{user_id}")
-async def get_user_balance_in_trip(
-    trip_id: uuid.UUID,
-    user_id: uuid.UUID,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-) -> Dict:
-    verify_trip_membership(db, trip_id, current_user.id)
-
-    service = BalanceService(db)
-    return service.calculate_user_balance_in_trip(trip_id, user_id)
-
-
 @router.get("/trip/{trip_id}/me")
 async def get_my_balance_in_trip(
     trip_id: uuid.UUID,

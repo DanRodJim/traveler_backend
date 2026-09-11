@@ -11,6 +11,7 @@ from app.models.expense import Expense, ExpenseSplit
 from app.models.flight import Flight, FlightSplit
 from app.models.trip_member import TripMember
 from app.models.user import User
+from app.core.exceptions import UnauthorizedError
 
 
 class BalanceService:
@@ -301,6 +302,14 @@ class BalanceService:
             'settlements_by_currency': user_settlements
         }
 
+    def _is_trip_member(self, trip_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        return (
+            self.db.query(TripMember)
+            .filter(TripMember.trip_id == trip_id, TripMember.user_id == user_id)
+            .first()
+            is not None
+        )
+
     def settle_between_users(
         self,
         trip_id: uuid.UUID,
@@ -308,6 +317,9 @@ class BalanceService:
         to_user_id: uuid.UUID,
         currency: str
     ) -> int:
+        if not self._is_trip_member(trip_id, from_user_id):
+            raise UnauthorizedError("from_user_id is not a member of this trip")
+
         now = datetime.now(timezone.utc)
         settled_count = 0
 
